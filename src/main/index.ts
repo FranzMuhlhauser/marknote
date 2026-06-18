@@ -1,6 +1,6 @@
 import { app, BrowserWindow, ipcMain, dialog } from 'electron'
 import { join } from 'path'
-import { readFile, writeFile } from 'fs/promises'
+import { readFile, writeFile, readdir, stat } from 'fs/promises'
 
 let mainWindow: BrowserWindow | null = null
 
@@ -42,6 +42,32 @@ ipcMain.handle('dialog:save', async (_event, { filePath, content }: { filePath?:
   if (!path) return null
   await writeFile(path, content, 'utf-8')
   return path
+})
+
+ipcMain.handle('dialog:openFolder', async () => {
+  const result = await dialog.showOpenDialog(mainWindow!, {
+    properties: ['openDirectory']
+  })
+  if (result.canceled || result.filePaths.length === 0) return null
+  return result.filePaths[0]
+})
+
+async function listMdFiles(dir: string, baseDir: string): Promise<{ name: string; path: string }[]> {
+  const entries = await readdir(dir, { withFileTypes: true })
+  const files: { name: string; path: string }[] = []
+  for (const entry of entries) {
+    const fullPath = join(dir, entry.name)
+    if (entry.isDirectory() && !entry.name.startsWith('.') && entry.name !== 'node_modules') {
+      files.push(...await listMdFiles(fullPath, baseDir))
+    } else if (entry.isFile() && entry.name.endsWith('.md')) {
+      files.push({ name: fullPath.replace(baseDir + '\\', ''), path: fullPath })
+    }
+  }
+  return files.sort((a, b) => a.name.localeCompare(b.name))
+}
+
+ipcMain.handle('folder:listFiles', async (_event, folderPath: string) => {
+  return await listMdFiles(folderPath, folderPath)
 })
 
 ipcMain.handle('file:read', async (_event, filePath: string) => {

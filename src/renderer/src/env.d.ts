@@ -3,6 +3,8 @@
 interface FileAPI {
   openFile: () => Promise<{ filePath: string; content: string } | null>
   saveFile: (filePath?: string, content?: string) => Promise<string | null>
+  openFolder: () => Promise<string | null>
+  listFiles: (folderPath: string) => Promise<{ name: string; path: string }[]>
   readFile: (filePath: string) => Promise<string>
   writeFile: (filePath: string, content: string) => Promise<void>
 }

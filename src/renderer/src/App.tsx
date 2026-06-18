@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useState, useRef } from 'react'
 import { useEditor, EditorContent } from '@tiptap/react'
 import { getExtensions } from './extensions'
 import { Toolbar } from './components/Toolbar'
@@ -6,6 +6,7 @@ import { SearchReplace } from './components/SearchReplace'
 import { CommandPalette } from './components/CommandPalette'
 import { Outline } from './components/Outline'
 import { Stats } from './components/Stats'
+import { FileExplorer } from './components/FileExplorer'
 import { mdToHtml, htmlToMd, DEFAULT_MD } from './utils/markdown'
 import { exportHtml, exportPdf } from './utils/export'
 import 'katex/dist/katex.min.css'
@@ -24,13 +25,18 @@ function App() {
   const [showPalette, setShowPalette] = useState(false)
   const [showOutline, setShowOutline] = useState(false)
   const [showStats, setShowStats] = useState(false)
+  const [showExplorer, setShowExplorer] = useState(false)
   const [focusMode, setFocusMode] = useState(false)
   const [showMenu, setShowMenu] = useState(false)
+  const [showSource, setShowSource] = useState(false)
+  const [sourceText, setSourceText] = useState('')
+  const [workspaceFolder, setWorkspaceFolder] = useState<string | null>(null)
+  const sourceRef = useRef<HTMLTextAreaElement>(null)
 
   const editor = useEditor({
     extensions: getExtensions(),
     content: mdToHtml(doc.raw),
-    onUpdate: ({ editor: ed }) => {
+    onUpdate: () => {
       setDoc(prev => prev.modified ? prev : { ...prev, modified: true })
     },
     editorProps: {
@@ -79,22 +85,41 @@ function App() {
     return htmlToMd(editor.getHTML())
   }, [editor])
 
-  const newDoc = useCallback(() => {
+  const loadContent = useCallback((md: string, filePath: string | null) => {
     if (!editor) return
-    editor.commands.setContent(mdToHtml(DEFAULT_MD))
-    setDoc({ filePath: null, raw: DEFAULT_MD, modified: false })
+    editor.commands.setContent(mdToHtml(md))
+    setDoc({ filePath, raw: md, modified: false })
+    setSourceText(md)
   }, [editor])
+
+  const newDoc = useCallback(() => {
+    loadContent(DEFAULT_MD, null)
+  }, [loadContent])
 
   const openDoc = useCallback(async () => {
     if (!editor) return
     const result = await window.api.openFile()
     if (!result) return
-    editor.commands.setContent(mdToHtml(result.content))
-    setDoc({ filePath: result.filePath, raw: result.content, modified: false })
+    loadContent(result.content, result.filePath)
     const recent = JSON.parse(localStorage.getItem('marknote-recent') || '[]') as string[]
     const next = [result.filePath, ...recent.filter(f => f !== result.filePath)].slice(0, 10)
     localStorage.setItem('marknote-recent', JSON.stringify(next))
-  }, [editor])
+  }, [editor, loadContent])
+
+  const openFolder = useCallback(async () => {
+    const folder = await window.api.openFolder()
+    if (!folder) return
+    setWorkspaceFolder(folder)
+    setShowExplorer(true)
+  }, [])
+
+  const openFileFromExplorer = useCallback(async (path: string) => {
+    const content = await window.api.readFile(path)
+    loadContent(content, path)
+    const recent = JSON.parse(localStorage.getItem('marknote-recent') || '[]') as string[]
+    const next = [path, ...recent.filter(f => f !== path)].slice(0, 10)
+    localStorage.setItem('marknote-recent', JSON.stringify(next))
+  }, [loadContent])
 
   const saveDoc = useCallback(async () => {
     if (!editor) return
@@ -102,6 +127,7 @@ function App() {
     const path = await window.api.saveFile(doc.filePath ?? undefined, text)
     if (path) {
       setDoc(prev => ({ ...prev, filePath: path, raw: text, modified: false }))
+      setSourceText(text)
       const recent = JSON.parse(localStorage.getItem('marknote-recent') || '[]') as string[]
       const next = [path, ...recent.filter(f => f !== path)].slice(0, 10)
       localStorage.setItem('marknote-recent', JSON.stringify(next))
@@ -113,6 +139,31 @@ function App() {
     const timer = setTimeout(() => saveDoc(), 30000)
     return () => clearTimeout(timer)
   }, [doc.modified, saveDoc])
+
+  const toggleSource = useCallback(() => {
+    if (!editor) return
+    if (!showSource) {
+      const md = getMarkdown()
+      setSourceText(md)
+      setShowSource(true)
+      setTimeout(() => sourceRef.current?.focus(), 50)
+    } else {
+      editor.commands.setContent(mdToHtml(sourceText))
+      setDoc(prev => ({ ...prev, raw: sourceText, modified: prev.modified || sourceText !== prev.raw }))
+      setShowSource(false)
+    }
+  }, [editor, showSource, getMarkdown, sourceText])
+
+  const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
+    if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+      e.preventDefault()
+      if (showSource) {
+        editor?.commands.setContent(mdToHtml(sourceText))
+        setDoc(prev => ({ ...prev, raw: sourceText, modified: true }))
+      }
+      saveDoc()
+    }
+  }, [showSource, sourceText, editor, saveDoc])
 
   const handleExportHtml = useCallback(async () => {
     if (!editor) return
@@ -164,8 +215,6 @@ function App() {
     ? doc.filePath.split('\\').pop()?.split('/').pop()
     : 'untitled.md'
 
-  const recentFiles = JSON.parse(localStorage.getItem('marknote-recent') || '[]') as string[]
-
   return (
     <div className={`app ${focusMode ? 'focus-mode' : ''}`}>
       <header className="titlebar">
@@ -178,12 +227,16 @@ function App() {
             {showMenu && (
               <div className="titlebar-menu" onMouseLeave={() => setShowMenu(false)}>
                 <button onClick={() => { newDoc(); setShowMenu(false) }}>New</button>
-                <button onClick={() => { openDoc(); setShowMenu(false) }}>Open</button>
+                <button onClick={() => { openDoc(); setShowMenu(false) }}>Open File</button>
+                <button onClick={() => { openFolder(); setShowMenu(false) }}>Open Folder</button>
                 <button onClick={() => { saveDoc(); setShowMenu(false) }}>Save</button>
+                <div className="menu-sep" />
+                <button onClick={() => { toggleSource(); setShowMenu(false) }}>{showSource ? 'WYSIWYG View' : 'Source View'}</button>
                 <div className="menu-sep" />
                 <button onClick={() => { handleExportHtml(); setShowMenu(false) }}>Export HTML</button>
                 <button onClick={() => { handleExportPdf(); setShowMenu(false) }}>Export PDF</button>
                 <div className="menu-sep" />
+                <button onClick={() => { setShowExplorer(e => !e); setShowMenu(false) }}>File Explorer</button>
                 <button onClick={() => { setShowOutline(o => !o); setShowMenu(false) }}>Outline</button>
                 <button onClick={() => { setShowStats(s => !s); setShowMenu(false) }}>Statistics</button>
                 <button onClick={() => { setFocusMode(f => !f); setShowMenu(false) }}>{focusMode ? 'Exit Focus' : 'Focus Mode'}</button>
@@ -195,6 +248,7 @@ function App() {
               </div>
             )}
           </div>
+          <button className="titlebar-btn" onClick={toggleSource} title="Toggle source view">{showSource ? '📝' : '📄'}</button>
           <button className="titlebar-btn" onClick={toggleTheme} title="Toggle theme">{theme === 'light' ? '🌙' : '☀️'}</button>
         </div>
       </header>
@@ -204,6 +258,17 @@ function App() {
       {showSearch && <SearchReplace editor={editor} onClose={() => setShowSearch(false)} />}
 
       <div className="main-content">
+        {showExplorer && workspaceFolder && (
+          <aside className="sidebar sidebar-left">
+            <FileExplorer
+              folder={workspaceFolder}
+              currentFile={doc.filePath}
+              onOpenFile={openFileFromExplorer}
+              onClose={() => setShowExplorer(false)}
+            />
+          </aside>
+        )}
+
         {showOutline && (
           <aside className="sidebar sidebar-left">
             <Outline editor={editor} />
@@ -211,7 +276,18 @@ function App() {
         )}
 
         <main className="editor-container">
-          <EditorContent editor={editor} />
+          {showSource ? (
+            <textarea
+              ref={sourceRef}
+              className="source-editor"
+              value={sourceText}
+              onChange={e => setSourceText(e.target.value)}
+              onKeyDown={handleKeyDown}
+              spellCheck={false}
+            />
+          ) : (
+            <EditorContent editor={editor} />
+          )}
         </main>
 
         {showStats && (
