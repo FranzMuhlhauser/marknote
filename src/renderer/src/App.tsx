@@ -77,7 +77,7 @@ function App() {
 
   useEffect(() => {
     window.api.checkUpdate().then(info => {
-      if (info && info.tag !== 'v0.1.0') setUpdateInfo(info)
+      if (info && info.tag !== 'v0.1.1') setUpdateInfo(info)
     })
   }, [])
 
