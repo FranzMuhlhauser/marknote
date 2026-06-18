@@ -1,6 +1,6 @@
-import { app, BrowserWindow, ipcMain, dialog } from 'electron'
+import { app, BrowserWindow, ipcMain, dialog, shell } from 'electron'
 import { join } from 'path'
-import { readFile, writeFile, readdir, stat } from 'fs/promises'
+import { readFile, writeFile, readdir } from 'fs/promises'
 
 let mainWindow: BrowserWindow | null = null
 
@@ -77,6 +77,21 @@ ipcMain.handle('file:read', async (_event, filePath: string) => {
 
 ipcMain.handle('file:write', async (_event, filePath: string, content: string) => {
   await writeFile(filePath, content, 'utf-8')
+})
+
+ipcMain.handle('update:check', async () => {
+  try {
+    const res = await fetch('https://api.github.com/repos/FranzMuhlhauser/marknote/releases/latest')
+    if (!res.ok) return null
+    const data = await res.json()
+    return { tag: data.tag_name, url: data.html_url }
+  } catch {
+    return null
+  }
+})
+
+ipcMain.handle('update:open', async (_event, url: string) => {
+  await shell.openExternal(url)
 })
 
 app.whenReady().then(createWindow)

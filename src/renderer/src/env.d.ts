@@ -7,6 +7,8 @@ interface FileAPI {
   listFiles: (folderPath: string) => Promise<{ name: string; path: string }[]>
   readFile: (filePath: string) => Promise<string>
   writeFile: (filePath: string, content: string) => Promise<void>
+  checkUpdate: () => Promise<{ tag: string; url: string } | null>
+  openUpdateUrl: (url: string) => Promise<void>
 }
 
 declare global {

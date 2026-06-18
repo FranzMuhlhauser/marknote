@@ -7,7 +7,7 @@ import { CommandPalette } from './components/CommandPalette'
 import { Outline } from './components/Outline'
 import { Stats } from './components/Stats'
 import { FileExplorer } from './components/FileExplorer'
-import { mdToHtml, htmlToMd, DEFAULT_MD } from './utils/markdown'
+import { mdToHtml, htmlToMd } from './utils/markdown'
 import { exportHtml, exportPdf } from './utils/export'
 import 'katex/dist/katex.min.css'
 import './App.css'
@@ -19,7 +19,7 @@ interface DocState {
 }
 
 function App() {
-  const [doc, setDoc] = useState<DocState>({ filePath: null, raw: DEFAULT_MD, modified: false })
+  const [doc, setDoc] = useState<DocState>({ filePath: null, raw: '', modified: false })
   const [theme, setTheme] = useState<'light' | 'dark'>('light')
   const [showSearch, setShowSearch] = useState(false)
   const [showPalette, setShowPalette] = useState(false)
@@ -31,6 +31,7 @@ function App() {
   const [showSource, setShowSource] = useState(false)
   const [sourceText, setSourceText] = useState('')
   const [workspaceFolder, setWorkspaceFolder] = useState<string | null>(null)
+  const [updateInfo, setUpdateInfo] = useState<{ tag: string; url: string } | null>(null)
   const sourceRef = useRef<HTMLTextAreaElement>(null)
 
   const editor = useEditor({
@@ -75,6 +76,12 @@ function App() {
   }, [theme])
 
   useEffect(() => {
+    window.api.checkUpdate().then(info => {
+      if (info && info.tag !== 'v0.1.0') setUpdateInfo(info)
+    })
+  }, [])
+
+  useEffect(() => {
     document.documentElement.classList.toggle('focus-mode', focusMode)
   }, [focusMode])
 
@@ -93,7 +100,7 @@ function App() {
   }, [editor])
 
   const newDoc = useCallback(() => {
-    loadContent(DEFAULT_MD, null)
+    loadContent('', null)
   }, [loadContent])
 
   const openDoc = useCallback(async () => {
@@ -153,6 +160,10 @@ function App() {
       setShowSource(false)
     }
   }, [editor, showSource, getMarkdown, sourceText])
+
+  const handleUpdate = useCallback(() => {
+    if (updateInfo) window.api.openUpdateUrl(updateInfo.url)
+  }, [updateInfo])
 
   const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
     if ((e.ctrlKey || e.metaKey) && e.key === 's') {
@@ -248,6 +259,11 @@ function App() {
               </div>
             )}
           </div>
+          {updateInfo && (
+            <button className="titlebar-btn update-btn" onClick={handleUpdate} title={`Update ${updateInfo.tag} available`}>
+              ⬇ {updateInfo.tag}
+            </button>
+          )}
           <button className="titlebar-btn" onClick={toggleSource} title="Toggle source view">{showSource ? '📝' : '📄'}</button>
           <button className="titlebar-btn" onClick={toggleTheme} title="Toggle theme">{theme === 'light' ? '🌙' : '☀️'}</button>
         </div>
