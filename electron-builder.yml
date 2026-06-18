@@ -1,0 +1,22 @@
+appId: com.marknote.app
+productName: Marknote
+directories:
+  buildResources: resources
+  output: dist-electron
+files:
+  - out/**/*
+  - "!node_modules/**/*"
+win:
+  icon: resources/icon.ico
+  target:
+    - target: nsis
+      arch:
+        - x64
+  artifactName: ${productName}-${version}-Setup.${ext}
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+  perMachine: false
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: Marknote
