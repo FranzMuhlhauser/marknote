@@ -1,8 +1,13 @@
 import { app, BrowserWindow, ipcMain, dialog, shell } from 'electron'
-import { join } from 'path'
-import { readFile, writeFile, readdir } from 'fs/promises'
+import { join, dirname, basename, extname } from 'path'
+import { readFile, writeFile, readdir, mkdir, rename, copyFile, unlink } from 'fs/promises'
+import { autoUpdater } from 'electron-updater'
 
 let mainWindow: BrowserWindow | null = null
+
+function send(channel: string, ...args: any[]) {
+  mainWindow?.webContents.send(channel, ...args)
+}
 
 function createWindow(): void {
   mainWindow = new BrowserWindow({
@@ -24,6 +29,16 @@ function createWindow(): void {
     mainWindow.loadFile(join(__dirname, '../renderer/index.html'))
   }
 }
+
+autoUpdater.autoDownload = false
+autoUpdater.autoInstallOnAppQuit = true
+
+autoUpdater.on('checking-for-update', () => send('update:status', 'checking'))
+autoUpdater.on('update-available', (info) => send('update:status', 'available', { version: info.version }))
+autoUpdater.on('update-not-available', () => send('update:status', 'not-available'))
+autoUpdater.on('download-progress', (p) => send('update:status', 'downloading', { percent: p.percent }))
+autoUpdater.on('update-downloaded', (info) => send('update:status', 'downloaded', { version: info.version }))
+autoUpdater.on('error', () => { /* silent in dev */ })
 
 ipcMain.handle('dialog:open', async () => {
   const result = await dialog.showOpenDialog(mainWindow!, {
@@ -79,22 +94,54 @@ ipcMain.handle('file:write', async (_event, filePath: string, content: string) =
   await writeFile(filePath, content, 'utf-8')
 })
 
-ipcMain.handle('update:check', async () => {
-  try {
-    const res = await fetch('https://api.github.com/repos/FranzMuhlhauser/marknote/releases/latest')
-    if (!res.ok) return null
-    const data = await res.json()
-    return { tag: data.tag_name, url: data.html_url }
-  } catch {
-    return null
+ipcMain.handle('update:startDownload', () => { autoUpdater.downloadUpdate() })
+ipcMain.handle('update:install', () => { autoUpdater.quitAndInstall() })
+
+ipcMain.handle('window:toggleFullscreen', () => {
+  if (!mainWindow) return
+  mainWindow.setFullScreen(!mainWindow.isFullScreen())
+})
+
+ipcMain.handle('file:createFolder', async (_event, parentPath: string, name: string) => {
+  await mkdir(join(parentPath, name), { recursive: true })
+})
+
+ipcMain.handle('file:rename', async (_event, oldPath: string, newPath: string) => {
+  await rename(oldPath, newPath)
+})
+
+ipcMain.handle('file:duplicate', async (_event, filePath: string) => {
+  const ext = extname(filePath)
+  const base = filePath.slice(0, -ext.length)
+  let newPath = `${base} (copia)${ext}`
+  let counter = 1
+  while (true) {
+    try {
+      await copyFile(filePath, newPath)
+      return newPath
+    } catch {
+      counter++
+      newPath = `${base} (copia ${counter})${ext}`
+    }
   }
 })
 
-ipcMain.handle('update:open', async (_event, url: string) => {
-  await shell.openExternal(url)
+ipcMain.handle('file:delete', async (_event, filePath: string) => {
+  await unlink(filePath)
 })
 
-app.whenReady().then(createWindow)
+ipcMain.handle('file:move', async (_event, oldPath: string, newPath: string) => {
+  await rename(oldPath, newPath)
+})
+
+ipcMain.handle('app:quit', () => {
+  app.quit()
+})
+
+app.whenReady().then(() => {
+  createWindow()
+  try { autoUpdater.checkForUpdates() } catch { /* silent */ }
+})
 
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit()

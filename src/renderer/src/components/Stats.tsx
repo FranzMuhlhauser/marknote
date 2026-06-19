@@ -18,31 +18,31 @@ export function Stats({ editor }: StatsProps) {
 
   return (
     <div className="stats-panel">
-      <div className="stats-title">Document Statistics</div>
+      <div className="stats-title">Estadísticas del documento</div>
       <div className="stats-grid">
         <div className="stat-item">
           <span className="stat-value">{stats.chars}</span>
-          <span className="stat-label">Characters</span>
+          <span className="stat-label">Caracteres</span>
         </div>
         <div className="stat-item">
           <span className="stat-value">{stats.words}</span>
-          <span className="stat-label">Words</span>
+          <span className="stat-label">Palabras</span>
         </div>
         <div className="stat-item">
           <span className="stat-value">{stats.lines}</span>
-          <span className="stat-label">Lines</span>
+          <span className="stat-label">Líneas</span>
         </div>
         <div className="stat-item">
           <span className="stat-value">{stats.paragraphs}</span>
-          <span className="stat-label">Paragraphs</span>
+          <span className="stat-label">Párrafos</span>
         </div>
         <div className="stat-item">
           <span className="stat-value">{stats.headings}</span>
-          <span className="stat-label">Headings</span>
+          <span className="stat-label">Encabezados</span>
         </div>
         <div className="stat-item">
           <span className="stat-value">{stats.readingTime}</span>
-          <span className="stat-label">Reading time</span>
+          <span className="stat-label">Tiempo lectura</span>
         </div>
       </div>
     </div>

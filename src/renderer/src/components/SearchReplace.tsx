@@ -1,5 +1,24 @@
 import { useState, useCallback, useRef, useEffect } from 'react'
 import type { Editor } from '@tiptap/core'
+import { Plugin, PluginKey } from '@tiptap/pm/state'
+import { Decoration, DecorationSet } from '@tiptap/pm/view'
+
+const searchPluginKey = new PluginKey('search-highlight')
+
+const searchPlugin = new Plugin({
+  key: searchPluginKey,
+  state: {
+    init() { return DecorationSet.empty },
+    apply(tr, set: DecorationSet) {
+      const meta = tr.getMeta(searchPluginKey)
+      if (meta !== undefined) return meta as DecorationSet
+      return set.map(tr.mapping, tr.doc)
+    }
+  },
+  props: {
+    decorations(state) { return this.getState(state) }
+  }
+})
 
 interface SearchReplaceProps {
   editor: Editor | null
@@ -44,6 +63,25 @@ export function SearchReplace({ editor, onClose }: SearchReplaceProps) {
     }
   }, [search, editor])
 
+  useEffect(() => {
+    if (!editor) return
+    editor.registerPlugin(searchPlugin)
+    return () => { try { editor.unregisterPlugin(searchPluginKey) } catch {} }
+  }, [editor])
+
+  useEffect(() => {
+    if (!editor) return
+    const actives = new Set(matchIdx >= 0 && matchIdx < matches.length ? [matches[matchIdx]] : [])
+    const decos = matches.map((m, i) =>
+      Decoration.inline(m.from + 1, m.to + 1, {
+        class: i === matchIdx ? 'search-match-active' : 'search-match-highlight'
+      })
+    )
+    editor.view.dispatch(
+      editor.state.tr.setMeta(searchPluginKey, DecorationSet.create(editor.state.doc, decos))
+    )
+  }, [editor, matches, matchIdx])
+
   const goTo = useCallback((idx: number) => {
     if (matches.length === 0) return
     const i = ((idx % matches.length) + matches.length) % matches.length
@@ -61,10 +99,14 @@ export function SearchReplace({ editor, onClose }: SearchReplaceProps) {
 
   const replaceAll = useCallback(() => {
     if (!editor || !search) return
-    const doc = editor.state.doc
-    const text = doc.textBetween(0, doc.content.size, '\n', '')
-    const replaced = text.replace(new RegExp(search.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi'), replace)
-    editor.commands.setContent(replaced)
+    const m = findMatches(editor, search)
+    if (m.length === 0) return
+    let tr = editor.state.tr
+    for (let i = m.length - 1; i >= 0; i--) {
+      const { from, to } = m[i]
+      tr = tr.replaceWith(from + 1, to + 1, editor.state.schema.text(replace))
+    }
+    editor.view.dispatch(tr)
     setSearch('')
   }, [editor, search, replace])
 

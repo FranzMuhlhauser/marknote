@@ -2,45 +2,93 @@ import { useCallback, useEffect, useState, useRef } from 'react'
 import { useEditor, EditorContent } from '@tiptap/react'
 import { getExtensions } from './extensions'
 import { Toolbar } from './components/Toolbar'
+import { MenuBar } from './components/MenuBar'
 import { SearchReplace } from './components/SearchReplace'
 import { CommandPalette } from './components/CommandPalette'
 import { Outline } from './components/Outline'
 import { Stats } from './components/Stats'
 import { FileExplorer } from './components/FileExplorer'
+import { StatusBar } from './components/StatusBar'
+import { TabBar, getTabTitle, type TabInfo } from './components/TabBar'
+import { WelcomeScreen } from './components/WelcomeScreen'
+import { Settings } from './components/Settings'
+import { TableContextMenu } from './components/TableContextMenu'
 import { mdToHtml, htmlToMd } from './utils/markdown'
 import { exportHtml, exportPdf } from './utils/export'
+import { loadTheme, saveTheme, type ThemeId } from './utils/themes'
 import 'katex/dist/katex.min.css'
 import './App.css'
 
-interface DocState {
+interface TabDoc {
+  id: string
   filePath: string | null
-  raw: string
+  content: string
   modified: boolean
 }
 
+let tabCounter = 1
+function createTab(content = '', filePath: string | null = null): TabDoc {
+  return { id: String(tabCounter++), filePath, content, modified: false }
+}
+
+function addRecent(path: string) {
+  const recent = JSON.parse(localStorage.getItem('marknote-recent') || '[]') as string[]
+  localStorage.setItem('marknote-recent', JSON.stringify([path, ...recent.filter(f => f !== path)].slice(0, 10)))
+}
+
 function App() {
-  const [doc, setDoc] = useState<DocState>({ filePath: null, raw: '', modified: false })
-  const [theme, setTheme] = useState<'light' | 'dark'>('light')
+  const [tabs, setTabs] = useState<TabDoc[]>([])
+  const [activeTabId, setActiveTabId] = useState<string | null>(null)
+  const [theme, setTheme] = useState<ThemeId>(loadTheme)
+  const [fontSize, setFontSize] = useState(() => Number(localStorage.getItem('marknote-font-size')) || 16)
   const [showSearch, setShowSearch] = useState(false)
   const [showPalette, setShowPalette] = useState(false)
-  const [showOutline, setShowOutline] = useState(false)
+  const [showOutline, setShowOutline] = useState(true)
   const [showStats, setShowStats] = useState(false)
-  const [showExplorer, setShowExplorer] = useState(false)
+  const [showExplorer, setShowExplorer] = useState(true)
   const [focusMode, setFocusMode] = useState(false)
-  const [showMenu, setShowMenu] = useState(false)
   const [showSource, setShowSource] = useState(false)
   const [sourceText, setSourceText] = useState('')
   const [workspaceFolder, setWorkspaceFolder] = useState<string | null>(null)
-  const [updateInfo, setUpdateInfo] = useState<{ tag: string; url: string } | null>(null)
+  const [updateStatus, setUpdateStatus] = useState<{ status: string; version?: string; percent?: number } | null>(null)
+  const [showSettings, setShowSettings] = useState(false)
+  const [showWelcome, setShowWelcome] = useState(true)
+  const [tableMenuPos, setTableMenuPos] = useState<{ x: number; y: number } | null>(null)
   const sourceRef = useRef<HTMLTextAreaElement>(null)
+  const switchingTab = useRef(false)
+
+  const activeTab = tabs.find(t => t.id === activeTabId) ?? null
 
   const editor = useEditor({
     extensions: getExtensions(),
-    content: mdToHtml(doc.raw),
-    onUpdate: () => {
-      setDoc(prev => prev.modified ? prev : { ...prev, modified: true })
+    content: '',
+    onUpdate: ({ editor: ed }) => {
+      if (switchingTab.current || !activeTabId) return
+      const md = htmlToMd(ed.getHTML())
+      setTabs(prev => prev.map(t =>
+        t.id === activeTabId ? { ...t, content: md, modified: true } : t
+      ))
     },
     editorProps: {
+      handleDOMEvents: {
+        contextMenu: (view, event) => {
+          // Check if right-clicked inside a table
+          const pos = view.posAtCoords({ left: event.clientX, top: event.clientY })
+          if (!pos) return false
+          const node = view.state.doc.nodeAt(pos.pos)
+          // Walk up to see if we're in a table
+          let foundTable = false
+          view.state.doc.nodesBetween(pos.pos - 1, pos.pos + 1, (n) => {
+            if (n.type.name === 'table') foundTable = true
+          })
+          if (foundTable) {
+            event.preventDefault()
+            setTableMenuPos({ x: event.clientX, y: event.clientY })
+            return true
+          }
+          return false
+        }
+      },
       handleDrop: (view, event) => {
         const files = Array.from(event.dataTransfer?.files || [])
         if (files.length === 0) return false
@@ -49,9 +97,8 @@ function App() {
             event.preventDefault()
             const reader = new FileReader()
             reader.onload = () => {
-              const url = reader.result as string
               view.dispatch(view.state.tr.replaceSelectionWith(
-                view.state.schema.nodes.image.create({ src: url })
+                view.state.schema.nodes.image.create({ src: reader.result as string })
               ))
             }
             reader.readAsDataURL(file)
@@ -64,54 +111,90 @@ function App() {
   })
 
   useEffect(() => {
-    const saved = localStorage.getItem('marknote-theme')
-    if (saved === 'dark' || saved === 'light') setTheme(saved)
     import('katex').then(k => { (window as any).katex = k.default })
     import('mermaid').then(m => { (window as any).mermaid = m.default })
   }, [])
 
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', theme)
-    localStorage.setItem('marknote-theme', theme)
+    saveTheme(theme)
   }, [theme])
 
   useEffect(() => {
-    window.api.checkUpdate().then(info => {
-      if (info && info.tag !== 'v0.1.1') setUpdateInfo(info)
+    document.documentElement.style.setProperty('--editor-font-size', `${fontSize}px`)
+    localStorage.setItem('marknote-font-size', String(fontSize))
+  }, [fontSize])
+
+  useEffect(() => {
+    window.api.onUpdateStatus((status, payload) => {
+      setUpdateStatus({ status, ...payload })
     })
   }, [])
 
-  useEffect(() => {
-    document.documentElement.classList.toggle('focus-mode', focusMode)
-  }, [focusMode])
+  const syncEditorToTab = useCallback(() => {
+    if (!editor || !activeTabId) return
+    const md = showSource ? sourceText : htmlToMd(editor.getHTML())
+    setTabs(prev => prev.map(t =>
+      t.id === activeTabId ? { ...t, content: md, modified: t.modified || md !== t.content } : t
+    ))
+  }, [editor, activeTabId, showSource, sourceText])
 
-  const toggleTheme = () => setTheme(t => (t === 'light' ? 'dark' : 'light'))
-
-  const getMarkdown = useCallback(() => {
-    if (!editor) return ''
-    return htmlToMd(editor.getHTML())
-  }, [editor])
-
-  const loadContent = useCallback((md: string, filePath: string | null) => {
+  const loadTabIntoEditor = useCallback((tab: TabDoc) => {
     if (!editor) return
-    editor.commands.setContent(mdToHtml(md))
-    setDoc({ filePath, raw: md, modified: false })
-    setSourceText(md)
+    switchingTab.current = true
+    editor.commands.setContent(mdToHtml(tab.content))
+    setSourceText(tab.content)
+    setShowSource(false)
+    setShowWelcome(false)
+    setTimeout(() => { switchingTab.current = false }, 50)
   }, [editor])
+
+  const openTab = useCallback((tab: TabDoc) => {
+    syncEditorToTab()
+    setTabs(prev => {
+      const exists = prev.find(t => t.id === tab.id)
+      return exists ? prev : [...prev, tab]
+    })
+    setActiveTabId(tab.id)
+    loadTabIntoEditor(tab)
+  }, [syncEditorToTab, loadTabIntoEditor])
 
   const newDoc = useCallback(() => {
-    loadContent('', null)
-  }, [loadContent])
+    syncEditorToTab()
+    const tab = createTab()
+    setTabs(prev => [...prev, tab])
+    setActiveTabId(tab.id)
+    loadTabIntoEditor(tab)
+  }, [syncEditorToTab, loadTabIntoEditor])
+
+  const loadContent = useCallback((md: string, filePath: string | null) => {
+    syncEditorToTab()
+    const existing = tabs.find(t => t.filePath === filePath && filePath !== null)
+    if (existing) {
+      setActiveTabId(existing.id)
+      loadTabIntoEditor(existing)
+      return
+    }
+    const tab = createTab(md, filePath)
+    setTabs(prev => [...prev, tab])
+    setActiveTabId(tab.id)
+    loadTabIntoEditor(tab)
+  }, [syncEditorToTab, tabs, loadTabIntoEditor])
 
   const openDoc = useCallback(async () => {
-    if (!editor) return
     const result = await window.api.openFile()
     if (!result) return
     loadContent(result.content, result.filePath)
-    const recent = JSON.parse(localStorage.getItem('marknote-recent') || '[]') as string[]
-    const next = [result.filePath, ...recent.filter(f => f !== result.filePath)].slice(0, 10)
-    localStorage.setItem('marknote-recent', JSON.stringify(next))
-  }, [editor, loadContent])
+    addRecent(result.filePath)
+  }, [loadContent])
+
+  const openFileFromExplorer = useCallback(async (path: string) => {
+    try {
+      const content = await window.api.readFile(path)
+      loadContent(content, path)
+      addRecent(path)
+    } catch { /* file not found */ }
+  }, [loadContent])
 
   const openFolder = useCallback(async () => {
     const folder = await window.api.openFolder()
@@ -120,74 +203,171 @@ function App() {
     setShowExplorer(true)
   }, [])
 
-  const openFileFromExplorer = useCallback(async (path: string) => {
-    const content = await window.api.readFile(path)
-    loadContent(content, path)
-    const recent = JSON.parse(localStorage.getItem('marknote-recent') || '[]') as string[]
-    const next = [path, ...recent.filter(f => f !== path)].slice(0, 10)
-    localStorage.setItem('marknote-recent', JSON.stringify(next))
-  }, [loadContent])
+  const getMarkdown = useCallback(() => {
+    if (showSource) return sourceText
+    if (!editor) return ''
+    return htmlToMd(editor.getHTML())
+  }, [editor, showSource, sourceText])
 
   const saveDoc = useCallback(async () => {
-    if (!editor) return
+    if (!activeTab) return
     const text = getMarkdown()
-    const path = await window.api.saveFile(doc.filePath ?? undefined, text)
+    const path = await window.api.saveFile(activeTab.filePath ?? undefined, text)
     if (path) {
-      setDoc(prev => ({ ...prev, filePath: path, raw: text, modified: false }))
+      setTabs(prev => prev.map(t =>
+        t.id === activeTabId ? { ...t, filePath: path, content: text, modified: false } : t
+      ))
       setSourceText(text)
-      const recent = JSON.parse(localStorage.getItem('marknote-recent') || '[]') as string[]
-      const next = [path, ...recent.filter(f => f !== path)].slice(0, 10)
-      localStorage.setItem('marknote-recent', JSON.stringify(next))
+      addRecent(path)
     }
-  }, [editor, doc.filePath, getMarkdown])
+  }, [activeTab, activeTabId, getMarkdown])
 
   useEffect(() => {
-    if (!doc.modified) return
+    if (!activeTab?.modified) return
     const timer = setTimeout(() => saveDoc(), 30000)
     return () => clearTimeout(timer)
-  }, [doc.modified, saveDoc])
+  }, [activeTab?.modified, saveDoc])
+
+  const saveAsDoc = useCallback(async () => {
+    if (!activeTab) return
+    const text = getMarkdown()
+    const path = await window.api.saveFile(undefined, text)
+    if (path) {
+      setTabs(prev => prev.map(t =>
+        t.id === activeTabId ? { ...t, filePath: path, content: text, modified: false } : t
+      ))
+      setSourceText(text)
+      addRecent(path)
+    }
+  }, [activeTab, activeTabId, getMarkdown])
 
   const toggleSource = useCallback(() => {
     if (!editor) return
     if (!showSource) {
-      const md = getMarkdown()
-      setSourceText(md)
+      setSourceText(getMarkdown())
       setShowSource(true)
       setTimeout(() => sourceRef.current?.focus(), 50)
     } else {
       editor.commands.setContent(mdToHtml(sourceText))
-      setDoc(prev => ({ ...prev, raw: sourceText, modified: prev.modified || sourceText !== prev.raw }))
+      setTabs(prev => prev.map(t =>
+        t.id === activeTabId ? { ...t, content: sourceText, modified: true } : t
+      ))
       setShowSource(false)
     }
-  }, [editor, showSource, getMarkdown, sourceText])
+  }, [editor, showSource, getMarkdown, sourceText, activeTabId])
 
-  const handleUpdate = useCallback(() => {
-    if (updateInfo) window.api.openUpdateUrl(updateInfo.url)
-  }, [updateInfo])
+  const handleReorderTab = useCallback((dragId: string, targetId: string, position: 'before' | 'after') => {
+    setTabs(prev => {
+      const dragIdx = prev.findIndex(t => t.id === dragId)
+      const targetIdx = prev.findIndex(t => t.id === targetId)
+      if (dragIdx === -1 || targetIdx === -1 || dragIdx === targetIdx) return prev
 
-  const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
-    if ((e.ctrlKey || e.metaKey) && e.key === 's') {
-      e.preventDefault()
-      if (showSource) {
-        editor?.commands.setContent(mdToHtml(sourceText))
-        setDoc(prev => ({ ...prev, raw: sourceText, modified: true }))
+      const tab = prev[dragIdx]
+      const next = prev.filter(t => t.id !== dragId)
+      const insertAt = targetIdx > dragIdx ? targetIdx - 1 : targetIdx
+      const finalPos = position === 'before' ? insertAt : insertAt + 1
+      next.splice(finalPos, 0, tab)
+      return next
+    })
+  }, [])
+
+  const selectTab = useCallback((id: string) => {
+    if (id === activeTabId) return
+    syncEditorToTab()
+    const tab = tabs.find(t => t.id === id)
+    if (!tab) return
+    setActiveTabId(id)
+    loadTabIntoEditor(tab)
+  }, [activeTabId, syncEditorToTab, tabs, loadTabIntoEditor])
+
+  const closeOthers = useCallback((keepId: string) => {
+    setTabs(prev => {
+      const keep = prev.find(t => t.id === keepId)
+      if (!keep) return prev
+      // If active tab is being closed, switch to the kept one
+      if (activeTabId !== keepId) {
+        setActiveTabId(keepId)
+        loadTabIntoEditor(keep)
       }
-      saveDoc()
-    }
-  }, [showSource, sourceText, editor, saveDoc])
+      return [keep]
+    })
+  }, [activeTabId, loadTabIntoEditor])
+
+  const closeAll = useCallback(() => {
+    syncEditorToTab()
+    setTabs([])
+    setActiveTabId(null)
+    setShowWelcome(true)
+    editor?.commands.clearContent()
+  }, [syncEditorToTab, editor])
+
+  const closeRight = useCallback((id: string) => {
+    setTabs(prev => {
+      const idx = prev.findIndex(t => t.id === id)
+      if (idx === -1) return prev
+      const keep = prev.slice(0, idx + 1)
+      // If active tab was to the right, switch to reference tab
+      const activeIdx = prev.findIndex(t => t.id === activeTabId)
+      if (activeIdx > idx) {
+        setActiveTabId(id)
+        const tab = prev.find(t => t.id === id)
+        if (tab) loadTabIntoEditor(tab)
+      }
+      return keep
+    })
+  }, [activeTabId, loadTabIntoEditor])
+
+  const closeSaved = useCallback(() => {
+    const currentActive = activeTabId
+    setTabs(prev => {
+      const unsaved = prev.filter(t => t.modified || !t.filePath)
+      if (unsaved.length === 0) {
+        // All saved, close everything
+        setActiveTabId(null)
+        setShowWelcome(true)
+        editor?.commands.clearContent()
+        return []
+      }
+      if (!unsaved.find(t => t.id === currentActive)) {
+        // Active was saved, switch to first unsaved
+        setActiveTabId(unsaved[0].id)
+        loadTabIntoEditor(unsaved[0])
+      }
+      return unsaved
+    })
+  }, [activeTabId, editor, loadTabIntoEditor])
+
+  const closeTab = useCallback((id: string) => {
+    setTabs(prev => {
+      const next = prev.filter(t => t.id !== id)
+      if (next.length === 0) {
+        setActiveTabId(null)
+        setShowWelcome(true)
+        editor?.commands.clearContent()
+        return []
+      }
+      if (id === activeTabId) {
+        const idx = prev.findIndex(t => t.id === id)
+        const newActive = next[Math.min(idx, next.length - 1)]
+        setActiveTabId(newActive.id)
+        loadTabIntoEditor(newActive)
+      }
+      return next
+    })
+  }, [activeTabId, editor, loadTabIntoEditor])
 
   const handleExportHtml = useCallback(async () => {
     if (!editor) return
-    const title = doc.filePath?.split('\\').pop()?.split('/').pop() || 'untitled'
+    const title = activeTab?.filePath?.split('\\').pop()?.split('/').pop() || 'untitled'
     await exportHtml(editor.getHTML(), title)
-  }, [editor, doc.filePath])
+  }, [editor, activeTab])
 
   const handleExportPdf = useCallback(async () => {
     if (!editor) return
-    const title = doc.filePath?.split('\\').pop()?.split('/').pop() || 'untitled'
+    const title = activeTab?.filePath?.split('\\').pop()?.split('/').pop() || 'untitled'
     const el = document.querySelector('.ProseMirror') as HTMLElement
     if (el) await exportPdf(el, title)
-  }, [editor, doc.filePath])
+  }, [editor, activeTab])
 
   const insertMermaid = useCallback(() => {
     editor?.chain().focus().insertContent({ type: 'mermaidBlock', attrs: { code: '' } }).run()
@@ -197,10 +377,46 @@ function App() {
     editor?.chain().focus().insertContent({ type: 'mathBlock', attrs: { tex: '' } }).run()
   }, [editor])
 
+  const insertLink = useCallback(() => {
+    const url = window.prompt('URL:')
+    if (url) editor?.chain().focus().setLink({ href: url }).run()
+  }, [editor])
+
+  const insertImage = useCallback(() => {
+    const input = document.createElement('input')
+    input.type = 'file'
+    input.accept = 'image/*'
+    input.onchange = () => {
+      const file = input.files?.[0]
+      if (!file) return
+      const reader = new FileReader()
+      reader.onload = () => editor?.chain().focus().setImage({ src: reader.result as string }).run()
+      reader.readAsDataURL(file)
+    }
+    input.click()
+  }, [editor])
+
+  const handleDownloadUpdate = useCallback(() => {
+    window.api.startDownloadUpdate()
+    setUpdateStatus(s => s ? { ...s, status: 'downloading', percent: 0 } : s)
+  }, [])
+
+  const handleInstallUpdate = useCallback(() => {
+    window.api.installUpdate()
+  }, [])
+
+  const cycleTheme = useCallback(() => {
+    const ids: ThemeId[] = ['light', 'dark', 'nord', 'dracula', 'solarized', 'github']
+    setTheme(t => ids[(ids.indexOf(t) + 1) % ids.length])
+  }, [])
+
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
-      if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === 'p') {
+      if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === 'P') {
         e.preventDefault(); setShowPalette(p => !p); return
+      }
+      if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === 'S') {
+        e.preventDefault(); saveAsDoc(); return
       }
       if ((e.ctrlKey || e.metaKey) && e.key === 's') {
         e.preventDefault(); saveDoc(); return
@@ -214,106 +430,183 @@ function App() {
       if ((e.ctrlKey || e.metaKey) && e.key === 'f') {
         e.preventDefault(); setShowSearch(s => !s); return
       }
+      if ((e.ctrlKey || e.metaKey) && e.key === 'h') {
+        e.preventDefault(); setShowSearch(s => !s); return
+      }
+      if ((e.ctrlKey || e.metaKey) && e.key === 'w') {
+        e.preventDefault(); if (activeTabId) closeTab(activeTabId); return
+      }
+      if ((e.ctrlKey || e.metaKey) && e.key === 'Tab') {
+        e.preventDefault()
+        const idx = tabs.findIndex(t => t.id === activeTabId)
+        if (idx !== -1) {
+          const next = e.shiftKey
+            ? (idx - 1 + tabs.length) % tabs.length
+            : (idx + 1) % tabs.length
+          selectTab(tabs[next].id)
+        }
+        return
+      }
+      if (e.key === 'F11') {
+        e.preventDefault(); window.api.toggleFullscreen(); return
+      }
       if (e.key === 'Escape') {
-        setShowSearch(false); setShowPalette(false); setShowMenu(false); return
+        if (showSource) { toggleSource(); return }
+        setShowSearch(false); setShowPalette(false); setShowSettings(false); setTableMenuPos(null); return
       }
     }
     window.addEventListener('keydown', handler)
     return () => window.removeEventListener('keydown', handler)
-  }, [saveDoc, openDoc, newDoc])
+  }, [saveDoc, saveAsDoc, openDoc, newDoc, activeTabId, closeTab, selectTab, tabs, showSource, toggleSource])
 
-  const title = doc.filePath
-    ? doc.filePath.split('\\').pop()?.split('/').pop()
-    : 'untitled.md'
+  const tabInfos: TabInfo[] = tabs.map(t => ({
+    id: t.id,
+    filePath: t.filePath,
+    title: getTabTitle(t.filePath),
+    modified: t.modified
+  }))
+
+  const title = activeTab ? getTabTitle(activeTab.filePath) : 'Marknote'
 
   return (
     <div className={`app ${focusMode ? 'focus-mode' : ''}`}>
-      <header className="titlebar">
-        <div className="titlebar-drag">
-          <span className="titlebar-title">{title}{doc.modified ? ' ●' : ''}</span>
-        </div>
-        <div className="titlebar-actions">
-          <div className="titlebar-menu-container">
-            <button className="titlebar-btn" onClick={() => setShowMenu(m => !m)}>Menu</button>
-            {showMenu && (
-              <div className="titlebar-menu" onMouseLeave={() => setShowMenu(false)}>
-                <button onClick={() => { newDoc(); setShowMenu(false) }}>New</button>
-                <button onClick={() => { openDoc(); setShowMenu(false) }}>Open File</button>
-                <button onClick={() => { openFolder(); setShowMenu(false) }}>Open Folder</button>
-                <button onClick={() => { saveDoc(); setShowMenu(false) }}>Save</button>
-                <div className="menu-sep" />
-                <button onClick={() => { toggleSource(); setShowMenu(false) }}>{showSource ? 'WYSIWYG View' : 'Source View'}</button>
-                <div className="menu-sep" />
-                <button onClick={() => { handleExportHtml(); setShowMenu(false) }}>Export HTML</button>
-                <button onClick={() => { handleExportPdf(); setShowMenu(false) }}>Export PDF</button>
-                <div className="menu-sep" />
-                <button onClick={() => { setShowExplorer(e => !e); setShowMenu(false) }}>File Explorer</button>
-                <button onClick={() => { setShowOutline(o => !o); setShowMenu(false) }}>Outline</button>
-                <button onClick={() => { setShowStats(s => !s); setShowMenu(false) }}>Statistics</button>
-                <button onClick={() => { setFocusMode(f => !f); setShowMenu(false) }}>{focusMode ? 'Exit Focus' : 'Focus Mode'}</button>
-                <div className="menu-sep" />
-                <button onClick={() => { insertMermaid(); setShowMenu(false) }}>Mermaid Diagram</button>
-                <button onClick={() => { insertMathBlock(); setShowMenu(false) }}>Math Block</button>
-                <div className="menu-sep" />
-                <button onClick={() => { toggleTheme(); setShowMenu(false) }}>{theme === 'light' ? 'Dark' : 'Light'} Theme</button>
-              </div>
-            )}
-          </div>
-          {updateInfo && (
-            <button className="titlebar-btn update-btn" onClick={handleUpdate} title={`Update ${updateInfo.tag} available`}>
-              ⬇ {updateInfo.tag}
-            </button>
-          )}
-          <button className="titlebar-btn" onClick={toggleSource} title="Toggle source view">{showSource ? '📝' : '📄'}</button>
-          <button className="titlebar-btn" onClick={toggleTheme} title="Toggle theme">{theme === 'light' ? '🌙' : '☀️'}</button>
-        </div>
-      </header>
+      <MenuBar
+        title={title}
+        modified={activeTab?.modified ?? false}
+        updateStatus={updateStatus}
+        onDownloadUpdate={handleDownloadUpdate}
+        onInstallUpdate={handleInstallUpdate}
+        onNew={newDoc}
+        onOpen={openDoc}
+        onSave={saveDoc}
+        onSaveAs={saveAsDoc}
+        onExportHtml={handleExportHtml}
+        onExportPdf={handleExportPdf}
+        onQuit={() => window.api.quit()}
+        onUndo={() => editor?.chain().focus().undo().run()}
+        onRedo={() => editor?.chain().focus().redo().run()}
+        onCut={() => document.execCommand('cut')}
+        onCopy={() => document.execCommand('copy')}
+        onPaste={() => document.execCommand('paste')}
+        onSearch={() => setShowSearch(true)}
+        onThemeLight={() => setTheme('light')}
+        onThemeDark={() => setTheme('dark')}
+        onFocusMode={() => setFocusMode(f => !f)}
+        onFullscreen={() => window.api.toggleFullscreen()}
+        onToggleOutline={() => setShowOutline(o => !o)}
+        onInsertTable={() => editor?.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run()}
+        onInsertImage={insertImage}
+        onInsertCode={() => editor?.chain().focus().toggleCodeBlock().run()}
+        onInsertMermaid={insertMermaid}
+        onInsertMath={insertMathBlock}
+        onInsertLink={insertLink}
+        onSettings={() => setShowSettings(true)}
+        onStats={() => setShowStats(s => !s)}
+        onCommandPalette={() => setShowPalette(true)}
+        onDownloadUpdate={handleDownloadUpdate}
+        onInstallUpdate={handleInstallUpdate}
+        focusMode={focusMode}
+        showOutline={showOutline}
+      />
 
-      <Toolbar editor={editor} />
+      <Toolbar
+        editor={editor}
+        onNew={newDoc}
+        onSave={saveDoc}
+        onToggleTheme={cycleTheme}
+        onFocusMode={() => setFocusMode(f => !f)}
+        onToggleSource={toggleSource}
+        onSettings={() => setShowSettings(true)}
+        focusMode={focusMode}
+        showSource={showSource}
+      />
+
+      <TabBar
+        tabs={tabInfos}
+        activeId={activeTabId ?? ''}
+        onSelect={selectTab}
+        onClose={closeTab}
+        onCloseOthers={closeOthers}
+        onCloseAll={closeAll}
+        onCloseRight={closeRight}
+        onCloseSaved={closeSaved}
+        onReorder={handleReorderTab}
+      />
 
       {showSearch && <SearchReplace editor={editor} onClose={() => setShowSearch(false)} />}
 
       <div className="main-content">
-        {showExplorer && workspaceFolder && (
-          <aside className="sidebar sidebar-left">
+        {showExplorer && (
+          <aside className={`sidebar sidebar-left ${focusMode ? 'dimmed' : ''}`}>
             <FileExplorer
               folder={workspaceFolder}
-              currentFile={doc.filePath}
+              currentFile={activeTab?.filePath ?? null}
               onOpenFile={openFileFromExplorer}
+              onOpenFolder={openFolder}
               onClose={() => setShowExplorer(false)}
             />
           </aside>
         )}
 
-        {showOutline && (
-          <aside className="sidebar sidebar-left">
-            <Outline editor={editor} />
-          </aside>
-        )}
-
         <main className="editor-container">
-          {showSource ? (
+          {showWelcome && tabs.length === 0 ? (
+            <WelcomeScreen
+              onNew={newDoc}
+              onOpen={openDoc}
+              onOpenRecent={openFileFromExplorer}
+            />
+          ) : showSource ? (
             <textarea
               ref={sourceRef}
               className="source-editor"
               value={sourceText}
-              onChange={e => setSourceText(e.target.value)}
-              onKeyDown={handleKeyDown}
+              onChange={e => {
+                setSourceText(e.target.value)
+                if (activeTabId) {
+                  setTabs(prev => prev.map(t =>
+                    t.id === activeTabId ? { ...t, content: e.target.value, modified: true } : t
+                  ))
+                }
+              }}
               spellCheck={false}
             />
           ) : (
             <EditorContent editor={editor} />
           )}
+          {tableMenuPos && editor && (
+            <TableContextMenu
+              editor={editor}
+              position={tableMenuPos}
+              onClose={() => setTableMenuPos(null)}
+            />
+          )}
         </main>
 
+        {showOutline && (
+          <aside className={`sidebar sidebar-right ${focusMode ? 'dimmed' : ''}`}>
+            <Outline editor={editor} />
+          </aside>
+        )}
+
         {showStats && (
-          <aside className="sidebar sidebar-right">
+          <aside className={`sidebar sidebar-right sidebar-stats ${focusMode ? 'dimmed' : ''}`}>
             <Stats editor={editor} />
           </aside>
         )}
       </div>
 
+      <StatusBar editor={editor} modified={activeTab?.modified ?? false} />
+
       {showPalette && <CommandPalette editor={editor} onClose={() => setShowPalette(false)} />}
+      {showSettings && (
+        <Settings
+          theme={theme}
+          fontSize={fontSize}
+          onThemeChange={setTheme}
+          onFontSizeChange={setFontSize}
+          onClose={() => setShowSettings(false)}
+        />
+      )}
     </div>
   )
 }

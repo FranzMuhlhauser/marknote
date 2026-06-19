@@ -9,23 +9,36 @@ interface Cmd {
 }
 
 const COMMANDS: Cmd[] = [
-  { id: 'bold', label: 'Bold', shortcut: 'Ctrl+B', action: e => e.chain().focus().toggleBold().run() },
-  { id: 'italic', label: 'Italic', shortcut: 'Ctrl+I', action: e => e.chain().focus().toggleItalic().run() },
-  { id: 'underline', label: 'Underline', shortcut: 'Ctrl+U', action: e => e.chain().focus().toggleUnderline().run() },
-  { id: 'strike', label: 'Strikethrough', action: e => e.chain().focus().toggleStrike().run() },
-  { id: 'h1', label: 'Heading 1', shortcut: 'Ctrl+1', action: e => e.chain().focus().toggleHeading({ level: 1 }).run() },
-  { id: 'h2', label: 'Heading 2', shortcut: 'Ctrl+2', action: e => e.chain().focus().toggleHeading({ level: 2 }).run() },
-  { id: 'h3', label: 'Heading 3', shortcut: 'Ctrl+3', action: e => e.chain().focus().toggleHeading({ level: 3 }).run() },
-  { id: 'bullet', label: 'Bullet List', action: e => e.chain().focus().toggleBulletList().run() },
-  { id: 'ordered', label: 'Ordered List', action: e => e.chain().focus().toggleOrderedList().run() },
-  { id: 'task', label: 'Task List', action: e => e.chain().focus().toggleTaskList().run() },
-  { id: 'quote', label: 'Blockquote', action: e => e.chain().focus().toggleBlockquote().run() },
-  { id: 'code', label: 'Code Block', action: e => e.chain().focus().toggleCodeBlock().run() },
-  { id: 'table', label: 'Insert Table', action: e => e.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run() },
-  { id: 'math-inline', label: 'Inline Math', action: e => e.chain().focus().insertContent({ type: 'mathInline', attrs: { tex: '' } }).run() },
-  { id: 'math-block', label: 'Math Block', action: e => e.chain().focus().insertContent({ type: 'mathBlock', attrs: { tex: '' } }).run() },
-  { id: 'mermaid', label: 'Mermaid Diagram', action: e => e.chain().focus().insertContent({ type: 'mermaidBlock', attrs: { code: '' } }).run() },
-  { id: 'hr', label: 'Horizontal Rule', action: e => e.chain().focus().setHorizontalRule().run() },
+  { id: 'bold', label: 'Negrita', shortcut: 'Ctrl+B', action: e => e.chain().focus().toggleBold().run() },
+  { id: 'italic', label: 'Cursiva', shortcut: 'Ctrl+I', action: e => e.chain().focus().toggleItalic().run() },
+  { id: 'underline', label: 'Subrayado', shortcut: 'Ctrl+U', action: e => e.chain().focus().toggleUnderline().run() },
+  { id: 'strike', label: 'Tachado', action: e => e.chain().focus().toggleStrike().run() },
+  { id: 'h1', label: 'Encabezado 1', shortcut: 'Ctrl+1', action: e => e.chain().focus().toggleHeading({ level: 1 }).run() },
+  { id: 'h2', label: 'Encabezado 2', shortcut: 'Ctrl+2', action: e => e.chain().focus().toggleHeading({ level: 2 }).run() },
+  { id: 'h3', label: 'Encabezado 3', shortcut: 'Ctrl+3', action: e => e.chain().focus().toggleHeading({ level: 3 }).run() },
+  { id: 'bullet', label: 'Lista con viñetas', action: e => e.chain().focus().toggleBulletList().run() },
+  { id: 'ordered', label: 'Lista numerada', action: e => e.chain().focus().toggleOrderedList().run() },
+  { id: 'task', label: 'Lista de tareas', action: e => e.chain().focus().toggleTaskList().run() },
+  { id: 'quote', label: 'Cita', action: e => e.chain().focus().toggleBlockquote().run() },
+  { id: 'code', label: 'Bloque de código', action: e => e.chain().focus().toggleCodeBlock().run() },
+  { id: 'table', label: 'Insertar tabla', action: e => e.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run() },
+  { id: 'math-inline', label: 'Fórmula en línea', action: e => e.chain().focus().insertContent({ type: 'mathInline', attrs: { tex: '' } }).run() },
+  { id: 'math-block', label: 'Bloque de fórmula', action: e => e.chain().focus().insertContent({ type: 'mathBlock', attrs: { tex: '' } }).run() },
+  { id: 'mermaid', label: 'Diagrama Mermaid', action: e => e.chain().focus().insertContent({ type: 'mermaidBlock', attrs: { code: '' } }).run() },
+  { id: 'hr', label: 'Línea horizontal', action: e => e.chain().focus().setHorizontalRule().run() },
+  { id: 'link', label: 'Insertar enlace', action: e => { const url = window.prompt('URL:'); if (url) e.chain().focus().setLink({ href: url }).run() } },
+  { id: 'image', label: 'Insertar imagen', action: e => {
+    const input = document.createElement('input')
+    input.type = 'file'; input.accept = 'image/*'
+    input.onchange = () => {
+      const file = input.files?.[0]
+      if (!file) return
+      const reader = new FileReader()
+      reader.onload = () => e.chain().focus().setImage({ src: reader.result as string }).run()
+      reader.readAsDataURL(file)
+    }
+    input.click()
+  }},
 ]
 
 interface CommandPaletteProps {
@@ -73,7 +86,7 @@ export function CommandPalette({ editor, onClose }: CommandPaletteProps) {
   return (
     <div className="command-palette-overlay" onClick={onClose}>
       <div className="command-palette" onClick={e => e.stopPropagation()}>
-        <input ref={inputRef} type="text" placeholder="Search commands..." value={query} onChange={e => setQuery(e.target.value)} onKeyDown={handleKeyDown} />
+        <input ref={inputRef} type="text" placeholder="Buscar comandos..." value={query} onChange={e => setQuery(e.target.value)} onKeyDown={handleKeyDown} />
         <div className="command-list" ref={listRef}>
           {filtered.map((cmd, i) => (
             <div key={cmd.id} className={`command-item ${i === selected ? 'selected' : ''}`} onClick={() => execute(cmd)} onMouseEnter={() => setSelected(i)}>
@@ -81,7 +94,7 @@ export function CommandPalette({ editor, onClose }: CommandPaletteProps) {
               {cmd.shortcut && <span className="command-shortcut">{cmd.shortcut}</span>}
             </div>
           ))}
-          {filtered.length === 0 && <div className="command-empty">No commands found</div>}
+          {filtered.length === 0 && <div className="command-empty">Sin resultados</div>}
         </div>
       </div>
     </div>

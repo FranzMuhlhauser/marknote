@@ -13,6 +13,10 @@ win:
       arch:
         - x64
   artifactName: ${productName}-${version}-Setup.${ext}
+publish:
+  provider: github
+  owner: FranzMuhlhauser
+  repo: marknote
 nsis:
   oneClick: false
   allowToChangeInstallationDirectory: true

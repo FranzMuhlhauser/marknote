@@ -9,14 +9,15 @@ import Table from '@tiptap/extension-table'
 import TableRow from '@tiptap/extension-table-row'
 import TableCell from '@tiptap/extension-table-cell'
 import TableHeader from '@tiptap/extension-table-header'
-import Image from '@tiptap/extension-image'
 import Highlight from '@tiptap/extension-highlight'
 import TextAlign from '@tiptap/extension-text-align'
-import CodeBlockLowlight from '@tiptap/extension-code-block-lowlight'
 import { common, createLowlight } from 'lowlight'
 import { MathInline } from './MathInline'
 import { MathBlock } from './MathBlock'
 import { MermaidBlock } from './MermaidBlock'
+import { CurrentLineHighlight } from './CurrentLineHighlight'
+import { CodeBlock } from './CodeBlock'
+import { ResizableImage } from './ResizableImage'
 
 const lowlight = createLowlight(common)
 
@@ -37,12 +38,13 @@ export function getExtensions() {
     TableRow,
     TableCell,
     TableHeader,
-    Image.configure({ inline: false, allowBase64: true }),
     Highlight,
     TextAlign.configure({ types: ['heading', 'paragraph'] }),
-    CodeBlockLowlight.configure({ lowlight }),
+    CodeBlock.configure({ lowlight }),
+    ResizableImage,
     MathInline,
     MathBlock,
-    MermaidBlock
+    MermaidBlock,
+    CurrentLineHighlight
   ]
 }
