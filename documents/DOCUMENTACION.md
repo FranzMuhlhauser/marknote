@@ -319,6 +319,7 @@ La aplicación sigue un diseño de **3 columnas**:
 | Canal | Descripción |
 |---|---|
 | `update:status` | Envía estado de la actualización (`checking`, `available`, `not-available`, `downloading`, `downloaded`, `error`) |
+| `file:open` | Envía ruta de archivo .md para abrir (desde segunda instancia, línea de comandos o archivo asociado) |
 
 ---
 
@@ -403,6 +404,7 @@ Para crear un nuevo Release:
 | v0.2.0 | 2026-06-18 | Menú contextual tablas, bloques código copiar/colapsar, imágenes redimensionar/alinear/alt, explorador avanzado (crear, renombrar, duplicar, eliminar, arrastrar), temas personalizados, sección plugins, traducción completa a español, reordenar pestañas, menú contextual pestañas |
 | v0.1.1 | 2026-06-18 | Nuevo doc en blanco, fix open file |
 | v0.1.0 | 2026-06-18 | Versión inicial: editor WYSIWYG, tablas, KaTeX, Mermaid, export, file explorer, source view |
+| v0.3.1 | 2026-06-19 | Corrección flushSync (closeTab, closeOthers, closeRight, closeSaved), Table resize desactivado (`resizable: false`), Table header sort removido, SlashCommand y VideoBlock agregados, TableSizePicker, BoldItalic, TableSort, single instance lock, file association, markdown-it plugins extendidos, DEFAULT_MD template, docs actualizadas |
 
 ---
 
@@ -481,3 +483,275 @@ Solo si ambos pasan sin errores se considera terminado.
 - El arrastre de pestañas usa HTML5 Drag & Drop API con indicadores `::before`/`::after` vía CSS
 - El menú contextual de tablas detecta clics en nodos `table` mediante `view.posAtCoords` + `doc.nodesBetween`
 - El icono `.ico` se genera desde PNG con `png2icons` (no usar `png-to-ico`)
+
+---
+
+## Extensiones TipTap (Completas)
+
+| Extensión | Propósito |
+|---|---|
+| StarterKit | Base del editor (párrafos, encabezados, listas, history, etc.) |
+| Placeholder | Texto placeholder "Start writing..." |
+| Underline | Formato subrayado |
+| Link | Enlaces clicables |
+| Typography | Reemplazos tipográficos (comillas, guiones, etc.) |
+| TaskList + TaskItem | Listas de tareas con checkbox |
+| Table + TableRow + TableCell + TableHeader | Tablas (resize desactivado, sort por click removido) |
+| Highlight | Resaltado de texto |
+| TextAlign | Alineación de párrafos |
+| CodeBlock (custom) | Bloques de código con lowlight, copiar y colapsar |
+| ResizableImage (custom) | Imágenes con redimensionar, alinear y alt text |
+| MathInline + MathBlock (custom) | Fórmulas KaTeX inline y en bloque |
+| MermaidBlock (custom) | Diagramas Mermaid |
+| CurrentLineHighlight (custom) | Resaltado de la línea activa en el editor |
+| VideoBlock (custom) | Video embebido (YouTube/URL) con redimensionar y alinear |
+| TableSort (custom) | Plugin de decoraciones para indicador de ordenamiento en tablas |
+| BoldItalic (custom) | Regla de entrada/salida para `***text***` (bold + italic) |
+| SlashCommand (custom) | Menú emergente al tipear `/` con opciones de inserción |
+
+---
+
+## Funcionalidades Implementadas (Extendido)
+
+### Video Embebido
+- Inserción de videos desde toolbar o paleta de comandos
+- Soporte para YouTube (URL directa o compartida) y URLs de video genéricas
+- Redimensionar con 3 handles de arrastre (esquina SE, borde E, borde S)
+- Alinear izquierda/centro/derecha con toolbar flotante
+- Prompt para ingresar URL al insertar
+
+### Menú Slash Command
+- Al tipear `/` en el editor se abre un popup con opciones de inserción
+- Soporta: Párrafo, H1-H3, Lista, Cita, Código, Tabla, Imagen, Fórmula, Mermaid, Video, Línea horizontal
+- Filtrado por texto de búsqueda mientras se escribe
+- Navegación por teclado (flechas + Enter)
+
+### Table Size Picker
+- Al insertar tabla desde el toolbar, se muestra un grid selector de celdas (10×10)
+- El usuario selecciona visualmente filas × columnas
+- Se inserta la tabla con las dimensiones elegidas
+
+### BoldItalic (`***text***`)
+- Soporte para la sintaxis Markdown `***text***` que produce texto negrita + cursiva
+- Implementado como inputRule + pasteRule personalizados
+
+### Markdown-it Extended
+- Plugins adicionales en `markdown.ts`: `markdown-it-sub` (subíndice), `markdown-it-sup` (superíndice), `markdown-it-footnote` (notas al pie), `markdown-it-mark` (resaltado), `markdown-it-ins` (insertado), `markdown-it-kbd` (teclado)
+- Turndown con reglas personalizadas para: bloques de código, task items, tachado, subíndice, superíndice, imágenes con alt+width+height+align
+
+### Default Content (DEFAULT_MD)
+- Nuevos documentos se crean con un contenido inicial template que incluye ejemplos de: encabezados, formato, listas, bloque de código, tabla, matemáticas, diagrama Mermaid
+
+### File Association / Single Instance
+- `app.requestSingleInstanceLock()` para evitar múltiples instancias
+- Segunda instancia envía evento `file:open` a la instancia existente
+- Soporte para `open-file` (macOS) y argumento de línea de comandos (`.md` file)
+- Renderer escucha `onOpenFile` desde preload para abrir archivo al recibir el evento
+
+### Markdown Source Editor
+- Vista fuente implementada con `<textarea>` sincronizado al estado del tab
+- Al cambiar a vista fuente: `editor.setEditable(false)`, se muestra textarea con contenido raw
+- Al cambiar a WYSIWYG: se parsea el texto del textarea y se vuelca al editor con `editor.commands.setContent()`
+- Atajo Escape vuelve a WYSIWYG
+- La vista fuente hereda estilos del editor (padding, font-size, max-width, caret-color)
+
+### Toggle Auto-save
+- En Settings > Editor: checkbox de autoguardado
+- Controla el intervalo de `setInterval` de 30s en App.tsx
+
+### lucide-react Icons
+- La Toolbar usa `lucide-react` para iconografía (FileText, Bold, Italic, etc.)
+
+---
+
+## Funcionalidades en Desarrollo
+
+- Sistema de plugins (extensiones cargables dinámicamente)
+- Temas comunitarios (importar/exportar temas)
+- Buscador de archivos en el explorador
+- Atajo Ctrl+Tab para navegación entre pestañas
+
+---
+
+## Mejoras de Interfaz de Usuario (Aplicadas)
+
+- **Sidebars responsives**: `flex-shrink: 1`, `min-width: 160px`; editor central `min-width: 300px`, `flex: 1 1 400px`
+- **Menú contextual del explorador**: `max-width: 50vw` para no desbordar
+- **Mensaje de error visual** en explorador cuando falla lectura de archivos
+- **Transiciones suaves** en botones de menú y pestañas (`background 0.15s`)
+- **`:focus-visible`** global con `outline: 2px solid var(--accent)`
+- **Scrollbars estilizadas** en `.tabbar`, `.command-list`, `.settings-body`
+- **`prefers-reduced-motion`** respetado en animaciones
+
+---
+
+## Correcciones y Bugs Solucionados
+
+### flushSync Error al Cerrar Pestañas
+- **Síntoma**: Error `flushSync was called from inside a lifecycle method` al cerrar pestañas (closeTab, closeOthers, closeRight, closeSaved)
+- **Causa raíz**: `loadTabIntoEditor()` (que llama a `editor.commands.setContent()`) se invocaba dentro del updater de `setTabs(prev => ...)`. Los updaters de `setState` se ejecutan durante la fase de render de React; `setContent` dispara una transacción de ProseMirror que crea NodeViews, y el constructor de `ReactRenderer` (`@tiptap/react`) llama a `ReactDOM.flushSync()` para montar el componente React — pero `flushSync` no puede llamarse durante el render.
+- **Fix**: Mover todos los side effects (`setActiveTabId`, `loadTabIntoEditor`, `setShowWelcome`, `editor?.commands.clearContent()`) fuera del updater de `setTabs`, a un `useEffect` o a la función contenedora. Cuatro funciones corregidas en `App.tsx`.
+
+### Estado Obsoleto del Editor tras Cerrar Todo
+- **Síntoma**: Tras cerrar todas las pestañas, al hacer clic en el editor quedaba un loop infinito de `Component does not exist` con montones de renders.
+- **Causa raíz**: El editor se montaba sin tabs activos y sin limpiar su contenido anterior.
+- **Fix**: Asegurar `showWelcome` se active y `editor.commands.clearContent()` se llame fuera del updater de `setTabs`.
+
+### Tabla: Resize Interfería con Edición
+- **Síntoma**: Las tablas tenían handles azules de redimensionamiento que interferían con clics y selección de celdas.
+- **Causa raíz**: `Table.configure({ resizable: true })` activaba el plugin `columnResizing` de `@tiptap/extension-table`, que inyecta `<colgroup>`, `<col>` con estilos inline, y manejadores de eventos para redimensionar.
+- **Fix**: Cambiar a `resizable: false` en `src/renderer/src/extensions/index.ts`.
+
+### Tabla: Click en Header Ordenaba sin Control
+- **Síntoma**: Cada clic en una celda `<th>` ordenaba la tabla, impidiendo escribir en celdas de encabezado o incluso seleccionar texto en tablas de una sola fila.
+- **Causa raíz**: `handleClickOn` para `tableHeader` que devolvía `true` (consumiendo el evento) cuando `childCount < 2` y ejecutaba `sortTable`.
+- **Fix**: Eliminar el bloque `handleClickOn` completo (líneas 76-111) y su import `tableSortKey` en `App.tsx`.
+
+### Atajo Negrita en Paleta de Comandos
+- **Síntoma**: La paleta mostraba `Ctrl+N` para Negrita, conflicto con Nuevo Documento.
+- **Fix**: Corregido a `Ctrl+B`.
+
+### Modo Enfoque: Clase Duplicada
+- **Síntoma**: `focus-mode` se aplicaba tanto en `.app` como en `<html>`.
+- **Fix**: Eliminar la duplicada en `<html>`, mantener solo en `.app`.
+
+### Menú Contextual: overflow
+- **Síntoma**: El menú contextual del explorador se desbordaba horizontalmente.
+- **Fix**: Agregar `max-width: 50vw` al menú contextual.
+
+---
+
+## Problemas Conocidos
+
+- **TabContextMenu detecta solo tablas del editor activo**: El menú contextual usa `view.posAtCoords` y funciona correctamente, pero no hay atajo de teclado para tablas.
+- **Source view ↔ WYSIWYG pierde sintaxis no compatible**: Elementos que Turndown no puede convertir (como atributos HTML avanzados en Markdown) pueden perderse al alternar entre vistas.
+- **El modo foco atenúa Stats**: Por diseño, pero Stats no reaparece al hover a diferencia de sidebars (mejora menor pendiente).
+- **Autoguardado sobrescribe sin confirmación**: Si el archivo se modificó externamente, el autoguardado lo sobrescribe.
+- **Decoraciones de búsqueda (SearchReplace) no se limpian al cerrar**: Quedan decoraciones en el editor hasta que se abre una nueva búsqueda (no visible para el usuario pero sí en el estado interno de ProseMirror).
+- **TabView (vista fuente) en pestaña nueva**: Al abrir vista fuente y luego cambiar de pestaña, el textarea no se sincroniza correctamente si hubo cambios sin guardar.
+
+---
+
+## Arquitectura del Proyecto
+
+### Flujo de Datos
+
+```
+Electron Main Process (src/main/index.ts)
+    │
+    ├── IPC Handlers (dialog:*, file:*, folder:*, window:*, update:*)
+    │
+    ├── contextBridge (src/preload/index.ts)
+    │       └── expone api.* en window.api
+    │
+    └── Renderer (src/renderer/)
+            │
+            ├── App.tsx (estado global, editor, layout)
+            │   ├── tabs: TabDoc[] (array de pestañas)
+            │   ├── activeTabId: string
+            │   ├── showWelcome: boolean
+            │   ├── showSource: boolean (vista fuente)
+            │   ├── showSearch: boolean, showCommandPalette, showSettings
+            │   ├── focusMode: boolean
+            │   ├── theme: string, customTheme
+            │   └── autoSave: boolean
+            │
+            ├── components/ (UI)
+            ├── extensions/ (TipTap personalizadas)
+            └── utils/ (markdown, export, themes, stats, prompt)
+```
+
+### Manejo de Estado del Editor
+
+1. Cada pestaña tiene: `{ id, filePath?, content, modified, savedContent }`
+2. Al cambiar de pestaña: se guarda el contenido actual en `tabs[].content`, se carga el nuevo tab con `loadTabIntoEditor`
+3. `onUpdate` del editor escribe en `tabs[].content` pero un flag `switchingTab` evita sobrescribir durante cambios de pestaña
+4. `onSelectionUpdate` actualiza línea/columna/palabras en la barra de estado
+
+### Ciclo de Vida del Editor
+
+- `editor` se crea con `useEditor()` de TipTap
+- Cuando no hay tabs activos y no hay `showWelcome`, se limpia el contenido con `editor.commands.clearContent()`
+- La vista fuente reemplaza el editor con `<textarea>`; al volver, se parsea el markdown de vuelta
+
+---
+
+## Próximos Pasos
+
+1. **Testing end-to-end**: Verificar todas las funcionalidades (tablas, imágenes, videos, mermaid, katex, búsqueda, pestañas, modo foco, temas) tras las correcciones
+2. **Resolver problemas conocidos**: Especialmente sincronización de vista fuente al cambiar de pestaña y limpieza de decoraciones de búsqueda
+3. **Sistema de plugins**: Arquitectura para extensiones cargables dinámicamente
+4. **Temas comunitarios**: Importar/exportar temas como archivos JSON
+5. **Ctrl+Tab**: Navegación por pestañas con orden de uso reciente (MRU)
+6. **Buscador de archivos**: En el explorador lateral
+
+---
+
+## Registro Técnico de Decisiones
+
+| Decisión | Alternativas | Razón |
+|---|---|---|
+| Mover side effects fuera de `setTabs` updater | 1. Refactor editor init, 2. setTimeout, 3. Ignorar el error | Los updaters ejecutan en fase de render; `flushSync` no puede llamarse allí. Refactor del editor era muy riesgoso. |
+| `resizable: false` en Table | 1. Quitar Table extension, 2. Custom NodeView sin resize, 3. Mantener y aceptar bugs | `columnResizing` inyecta DOM y eventos que rompen edición. Custom NodeView era sobreingeniería. |
+| Remover `handleClickOn` para `tableHeader` | 1. Refactor sort condicional, 2. Mantener con flag, 3. Eliminar | Sort-on-click rompía edición en headers. Refactor condicional agregaba complejidad innecesaria para una feature no esencial (el sort sigue disponible desde el plugin TableSort). |
+| SlashCommand como extensión separada | 1. Integrar en Toolbar, 2. Paleta de comandos, 3. Plugin TipTap dedicado | Como extensión TipTap es auto-contenida, reutilizable, con ciclo de vida manejado por ProseMirror. |
+| VideoBlock como NodeView (no markdown-it) | 1. markdown-it plugin, 2. HTML puro, 3. NodeView React | NodeView React permite renderizado interactivo (resize, align) igual que imágenes. |
+| DEFAULT_MD con ejemplos in-template | 1. Documento vacío, 2. Cargar de archivo externo, 3. Template inline | Inline elimina dependencia externa; ejemplos ayudan al usuario a descubrir features. |
+
+---
+
+## Bitácora de la Sesión Actual
+
+### 2026-06-18 — Corrección de flushSync y bugs de tablas (18:00-20:30)
+
+**Funcionalidades implementadas hoy**: Ninguna. Sesión dedicada a debugging y corrección de bugs.
+
+**Problemas encontrados**:
+1. Error `flushSync was called from inside a lifecycle method` al cerrar pestañas (closeTab, closeOthers, closeRight, closeSaved)
+2. Tablas: handles de resize interferían con clics y selección de celdas
+3. Tablas: clic en celda `<th>` ejecutaba sort y bloqueaba la edición del encabezado
+
+**Soluciones aplicadas**:
+1. Extraer `loadTabIntoEditor`, `setActiveTabId`, `setShowWelcome`, `clearContent` de dentro de los updaters de `setTabs` en las 4 funciones de cierre
+2. Cambiar `Table.configure({ resizable: true })` → `false` en `extensions/index.ts:43`
+3. Eliminar bloque `handleClickOn` para `tableHeader` (líneas 76-111) y su import `tableSortKey` en `App.tsx`
+
+**Archivos modificados**:
+- `src/renderer/src/App.tsx` — flushSync fix + tableHeader sort removido
+- `src/renderer/src/extensions/index.ts` — resizable false
+
+**Próximas tareas recomendadas**:
+- Probar la aplicación end-to-end tras correcciones
+- Actualizar documentación del proyecto
+
+### 2026-06-19 — Actualización de documentación (14:00-16:30)
+
+**Funcionalidades implementadas hoy**: Ninguna código nuevo. Sesión dedicada exclusivamente a documentación.
+
+**Problemas encontrados**:
+- Documentación existente desactualizada vs el código real:
+  - 4 extensiones TipTap no documentadas (SlashCommand, VideoBlock, TableSort, BoldItalic)
+  - 1 componente no documentado (TableSizePicker)
+  - 2 utils no documentados (prompt.ts, DEFAULT_MD)
+  - 6 dependencias no documentadas (lucide-react, markdown-it-sub, markdown-it-sup, markdown-it-footnote, markdown-it-mark, markdown-it-ins, markdown-it-kbd)
+  - 3 bugs corregidos no documentados (flushSync, table resize, table header sort)
+  - Features de sistema no documentadas (single instance lock, file association, second instance forwarding)
+  - Evento IPC `file:open` faltaba en la tabla de eventos Main → Renderer
+
+**Soluciones aplicadas**:
+- Tabla completa de extensiones TipTap (16 extensiones vs 12 anteriores)
+- Nueva sección "Funcionalidades Implementadas (Extendido)" con: Video Embebido, Menú Slash Command, Table Size Picker, BoldItalic, Markdown-it Extended, Default Content, File Association / Single Instance, Markdown Source Editor, Toggle Auto-save, lucide-react Icons
+- Nuevas secciones: Funcionalidades en Desarrollo, Mejoras de UI, Correcciones y Bugs Solucionados, Problemas Conocidos, Arquitectura del Proyecto, Próximos Pasos, Registro Técnico de Decisiones
+- Bitácora completa con ambas sesiones
+- Versión v0.3.1 agregada al Historial de Versiones
+- Evento `file:open` agregado a tabla IPC Events
+
+**Archivos modificados**:
+- `documents/DOCUMENTACION.md` — todas las adiciones y correcciones
+
+**Próximas tareas recomendadas**:
+1. Probar la aplicación end-to-end tras las correcciones de la sesión anterior
+2. Resolver problemas conocidos documentados (sincronización vista fuente, limpieza decoraciones)
+3. Sistema de plugins (extensiones cargables dinámicamente)
+4. Ctrl+Tab con orden MRU
+5. Buscador de archivos en el explorador lateral

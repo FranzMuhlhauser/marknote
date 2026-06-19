@@ -13,8 +13,10 @@ import { TabBar, getTabTitle, type TabInfo } from './components/TabBar'
 import { WelcomeScreen } from './components/WelcomeScreen'
 import { Settings } from './components/Settings'
 import { TableContextMenu } from './components/TableContextMenu'
+import { TableSizePicker } from './components/TableSizePicker'
 import { mdToHtml, htmlToMd } from './utils/markdown'
 import { exportHtml, exportPdf } from './utils/export'
+import { showPrompt } from './utils/prompt'
 import { loadTheme, saveTheme, type ThemeId } from './utils/themes'
 import 'katex/dist/katex.min.css'
 import './App.css'
@@ -45,7 +47,7 @@ function App() {
   const [showPalette, setShowPalette] = useState(false)
   const [showOutline, setShowOutline] = useState(true)
   const [showStats, setShowStats] = useState(false)
-  const [showExplorer, setShowExplorer] = useState(true)
+  const [showExplorer, setShowExplorer] = useState(() => localStorage.getItem('marknote-show-explorer') !== 'false')
   const [focusMode, setFocusMode] = useState(false)
   const [showSource, setShowSource] = useState(false)
   const [sourceText, setSourceText] = useState('')
@@ -54,6 +56,7 @@ function App() {
   const [showSettings, setShowSettings] = useState(false)
   const [showWelcome, setShowWelcome] = useState(true)
   const [tableMenuPos, setTableMenuPos] = useState<{ x: number; y: number } | null>(null)
+  const [tablePickerPos, setTablePickerPos] = useState<{ x: number; y: number } | null>(null)
   const sourceRef = useRef<HTMLTextAreaElement>(null)
   const switchingTab = useRef(false)
 
@@ -126,6 +129,10 @@ function App() {
   }, [fontSize])
 
   useEffect(() => {
+    localStorage.setItem('marknote-show-explorer', String(showExplorer))
+  }, [showExplorer])
+
+  useEffect(() => {
     window.api.onUpdateStatus((status, payload) => {
       setUpdateStatus({ status, ...payload })
     })
@@ -195,6 +202,15 @@ function App() {
       addRecent(path)
     } catch { /* file not found */ }
   }, [loadContent])
+
+  const openFileFromExplorerRef = useRef(openFileFromExplorer)
+  openFileFromExplorerRef.current = openFileFromExplorer
+
+  useEffect(() => {
+    window.api.onOpenFile((filePath) => {
+      openFileFromExplorerRef.current(filePath)
+    })
+  }, [])
 
   const openFolder = useCallback(async () => {
     const folder = await window.api.openFolder()
@@ -281,17 +297,14 @@ function App() {
   }, [activeTabId, syncEditorToTab, tabs, loadTabIntoEditor])
 
   const closeOthers = useCallback((keepId: string) => {
-    setTabs(prev => {
-      const keep = prev.find(t => t.id === keepId)
-      if (!keep) return prev
-      // If active tab is being closed, switch to the kept one
-      if (activeTabId !== keepId) {
-        setActiveTabId(keepId)
-        loadTabIntoEditor(keep)
-      }
-      return [keep]
-    })
-  }, [activeTabId, loadTabIntoEditor])
+    const keep = tabs.find(t => t.id === keepId)
+    if (!keep) return
+    setTabs([keep])
+    if (activeTabId !== keepId) {
+      setActiveTabId(keepId)
+      loadTabIntoEditor(keep)
+    }
+  }, [tabs, activeTabId, loadTabIntoEditor])
 
   const closeAll = useCallback(() => {
     syncEditorToTab()
@@ -302,59 +315,48 @@ function App() {
   }, [syncEditorToTab, editor])
 
   const closeRight = useCallback((id: string) => {
-    setTabs(prev => {
-      const idx = prev.findIndex(t => t.id === id)
-      if (idx === -1) return prev
-      const keep = prev.slice(0, idx + 1)
-      // If active tab was to the right, switch to reference tab
-      const activeIdx = prev.findIndex(t => t.id === activeTabId)
-      if (activeIdx > idx) {
-        setActiveTabId(id)
-        const tab = prev.find(t => t.id === id)
-        if (tab) loadTabIntoEditor(tab)
-      }
-      return keep
-    })
-  }, [activeTabId, loadTabIntoEditor])
+    const idx = tabs.findIndex(t => t.id === id)
+    if (idx === -1) return
+    const keep = tabs.slice(0, idx + 1)
+    setTabs(keep)
+    const activeIdx = tabs.findIndex(t => t.id === activeTabId)
+    if (activeIdx > idx) {
+      setActiveTabId(id)
+      const tab = tabs.find(t => t.id === id)
+      if (tab) loadTabIntoEditor(tab)
+    }
+  }, [tabs, activeTabId, loadTabIntoEditor])
 
   const closeSaved = useCallback(() => {
-    const currentActive = activeTabId
-    setTabs(prev => {
-      const unsaved = prev.filter(t => t.modified || !t.filePath)
-      if (unsaved.length === 0) {
-        // All saved, close everything
-        setActiveTabId(null)
-        setShowWelcome(true)
-        editor?.commands.clearContent()
-        return []
-      }
-      if (!unsaved.find(t => t.id === currentActive)) {
-        // Active was saved, switch to first unsaved
+    const unsaved = tabs.filter(t => t.modified || !t.filePath)
+    if (unsaved.length === 0) {
+      setTabs([])
+      setActiveTabId(null)
+      setShowWelcome(true)
+      editor?.commands.clearContent()
+    } else {
+      setTabs(unsaved)
+      if (!unsaved.find(t => t.id === activeTabId)) {
         setActiveTabId(unsaved[0].id)
         loadTabIntoEditor(unsaved[0])
       }
-      return unsaved
-    })
-  }, [activeTabId, editor, loadTabIntoEditor])
+    }
+  }, [tabs, activeTabId, editor, loadTabIntoEditor])
 
   const closeTab = useCallback((id: string) => {
-    setTabs(prev => {
-      const next = prev.filter(t => t.id !== id)
-      if (next.length === 0) {
-        setActiveTabId(null)
-        setShowWelcome(true)
-        editor?.commands.clearContent()
-        return []
-      }
-      if (id === activeTabId) {
-        const idx = prev.findIndex(t => t.id === id)
-        const newActive = next[Math.min(idx, next.length - 1)]
-        setActiveTabId(newActive.id)
-        loadTabIntoEditor(newActive)
-      }
-      return next
-    })
-  }, [activeTabId, editor, loadTabIntoEditor])
+    const next = tabs.filter(t => t.id !== id)
+    setTabs(next)
+    if (next.length === 0) {
+      setActiveTabId(null)
+      setShowWelcome(true)
+      editor?.commands.clearContent()
+    } else if (id === activeTabId) {
+      const idx = tabs.findIndex(t => t.id === id)
+      const newActive = next[Math.min(idx, next.length - 1)]
+      setActiveTabId(newActive.id)
+      loadTabIntoEditor(newActive)
+    }
+  }, [tabs, activeTabId, editor, loadTabIntoEditor])
 
   const handleExportHtml = useCallback(async () => {
     if (!editor) return
@@ -377,8 +379,8 @@ function App() {
     editor?.chain().focus().insertContent({ type: 'mathBlock', attrs: { tex: '' } }).run()
   }, [editor])
 
-  const insertLink = useCallback(() => {
-    const url = window.prompt('URL:')
+  const insertLink = useCallback(async () => {
+    const url = await showPrompt('URL:')
     if (url) editor?.chain().focus().setLink({ href: url }).run()
   }, [editor])
 
@@ -394,6 +396,42 @@ function App() {
       reader.readAsDataURL(file)
     }
     input.click()
+  }, [editor])
+
+  const insertQuote = useCallback(() => {
+    editor?.chain().focus().toggleBlockquote().run()
+  }, [editor])
+
+  const [lastTableSize, setLastTableSize] = useState(() => {
+    const saved = localStorage.getItem('marknote-table-size')
+    if (saved) {
+      try { return JSON.parse(saved) as { rows: number; cols: number } } catch { /* ignore */ }
+    }
+    return { rows: 3, cols: 3 }
+  })
+
+  const handleInsertTable = useCallback((e: React.MouseEvent) => {
+    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect()
+    setTablePickerPos({ x: rect.left, y: rect.bottom + 2 })
+  }, [])
+
+  const handleTableSizeSelect = useCallback((rows: number, cols: number) => {
+    editor?.chain().focus().insertTable({ rows, cols, withHeaderRow: true }).run()
+    setLastTableSize({ rows, cols })
+    localStorage.setItem('marknote-table-size', JSON.stringify({ rows, cols }))
+    setTablePickerPos(null)
+  }, [editor])
+
+  const insertVideo = useCallback(async () => {
+    const url = await showPrompt('URL del video (YouTube o directa):')
+    if (!url) return
+    const youtubeRegex = /(?:youtube\.com\/(?:watch\?v=|embed\/)|youtu\.be\/)([a-zA-Z0-9_-]{11})/
+    const match = url.match(youtubeRegex)
+    if (match) {
+      editor?.chain().focus().insertContent({ type: 'videoBlock', attrs: { src: `https://www.youtube.com/embed/${match[1]}`, type: 'youtube' } }).run()
+    } else {
+      editor?.chain().focus().insertContent({ type: 'videoBlock', attrs: { src: url, type: 'url' } }).run()
+    }
   }, [editor])
 
   const handleDownloadUpdate = useCallback(() => {
@@ -421,6 +459,9 @@ function App() {
       if ((e.ctrlKey || e.metaKey) && e.key === 's') {
         e.preventDefault(); saveDoc(); return
       }
+      if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === 'O') {
+        e.preventDefault(); openFolder(); return
+      }
       if ((e.ctrlKey || e.metaKey) && e.key === 'o') {
         e.preventDefault(); openDoc(); return
       }
@@ -447,17 +488,24 @@ function App() {
         }
         return
       }
+      if ((e.ctrlKey || e.metaKey) && e.key === 'b') {
+        // Only toggle sidebar if not focused in the editor (let editor handle bold)
+        const pm = document.querySelector('.ProseMirror')
+        if (!pm || !pm.contains(document.activeElement)) {
+          e.preventDefault(); setShowExplorer(s => !s); return
+        }
+      }
       if (e.key === 'F11') {
         e.preventDefault(); window.api.toggleFullscreen(); return
       }
       if (e.key === 'Escape') {
         if (showSource) { toggleSource(); return }
-        setShowSearch(false); setShowPalette(false); setShowSettings(false); setTableMenuPos(null); return
+        setShowSearch(false); setShowPalette(false); setShowSettings(false); setTableMenuPos(null); setTablePickerPos(null); return
       }
     }
     window.addEventListener('keydown', handler)
     return () => window.removeEventListener('keydown', handler)
-  }, [saveDoc, saveAsDoc, openDoc, newDoc, activeTabId, closeTab, selectTab, tabs, showSource, toggleSource])
+  }, [saveDoc, saveAsDoc, openDoc, openFolder, newDoc, activeTabId, closeTab, selectTab, tabs, showSource, toggleSource])
 
   const tabInfos: TabInfo[] = tabs.map(t => ({
     id: t.id,
@@ -494,18 +542,18 @@ function App() {
         onFocusMode={() => setFocusMode(f => !f)}
         onFullscreen={() => window.api.toggleFullscreen()}
         onToggleOutline={() => setShowOutline(o => !o)}
-        onInsertTable={() => editor?.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run()}
+        onInsertTable={handleInsertTable}
         onInsertImage={insertImage}
         onInsertCode={() => editor?.chain().focus().toggleCodeBlock().run()}
         onInsertMermaid={insertMermaid}
         onInsertMath={insertMathBlock}
         onInsertLink={insertLink}
+        onInsertQuote={insertQuote}
+        onInsertVideo={insertVideo}
         onSettings={() => setShowSettings(true)}
         onStats={() => setShowStats(s => !s)}
         onCommandPalette={() => setShowPalette(true)}
-        onDownloadUpdate={handleDownloadUpdate}
-        onInstallUpdate={handleInstallUpdate}
-        focusMode={focusMode}
+          focusMode={focusMode}
         showOutline={showOutline}
       />
 
@@ -517,8 +565,16 @@ function App() {
         onFocusMode={() => setFocusMode(f => !f)}
         onToggleSource={toggleSource}
         onSettings={() => setShowSettings(true)}
+        onToggleExplorer={() => setShowExplorer(s => !s)}
+        onInsertTable={handleInsertTable}
+        onInsertImage={insertImage}
+        onInsertCode={() => editor?.chain().focus().toggleCodeBlock().run()}
+        onInsertLink={insertLink}
+        onInsertMath={insertMathBlock}
+        onInsertVideo={insertVideo}
         focusMode={focusMode}
         showSource={showSource}
+        showExplorer={showExplorer}
       />
 
       <TabBar
@@ -536,24 +592,23 @@ function App() {
       {showSearch && <SearchReplace editor={editor} onClose={() => setShowSearch(false)} />}
 
       <div className="main-content">
-        {showExplorer && (
-          <aside className={`sidebar sidebar-left ${focusMode ? 'dimmed' : ''}`}>
-            <FileExplorer
-              folder={workspaceFolder}
-              currentFile={activeTab?.filePath ?? null}
-              onOpenFile={openFileFromExplorer}
-              onOpenFolder={openFolder}
-              onClose={() => setShowExplorer(false)}
-            />
-          </aside>
-        )}
+        <aside className={`sidebar sidebar-left ${focusMode ? 'dimmed' : ''} ${!showExplorer ? 'collapsed' : ''}`}>
+          <FileExplorer
+            folder={workspaceFolder}
+            currentFile={activeTab?.filePath ?? null}
+            onOpenFile={openFileFromExplorer}
+            onOpenFolder={openFolder}
+            onOpenFileFromDisk={openDoc}
+            onNewDoc={newDoc}
+            onClose={() => setShowExplorer(false)}
+          />
+        </aside>
 
         <main className="editor-container">
           {showWelcome && tabs.length === 0 ? (
             <WelcomeScreen
               onNew={newDoc}
               onOpen={openDoc}
-              onOpenRecent={openFileFromExplorer}
             />
           ) : showSource ? (
             <textarea
@@ -578,6 +633,14 @@ function App() {
               editor={editor}
               position={tableMenuPos}
               onClose={() => setTableMenuPos(null)}
+            />
+          )}
+          {tablePickerPos && (
+            <TableSizePicker
+              position={tablePickerPos}
+              defaultSize={lastTableSize}
+              onSelect={handleTableSizeSelect}
+              onClose={() => setTablePickerPos(null)}
             />
           )}
         </main>

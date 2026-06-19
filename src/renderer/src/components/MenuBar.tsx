@@ -36,6 +36,8 @@ interface MenuBarProps {
   onInsertMermaid: () => void
   onInsertMath: () => void
   onInsertLink: () => void
+  onInsertQuote: () => void
+  onInsertVideo: () => void
   onSettings: () => void
   onStats: () => void
   onCommandPalette: () => void
@@ -108,10 +110,12 @@ export function MenuBar(props: MenuBarProps) {
   const insertar: MenuAction[] = [
     { label: 'Tabla', action: props.onInsertTable },
     { label: 'Imagen', action: props.onInsertImage },
-    { label: 'Código', action: props.onInsertCode },
+    { label: 'Video', action: props.onInsertVideo },
+    { label: 'Enlace', action: props.onInsertLink },
+    { label: 'Bloque de Código', action: props.onInsertCode },
     { label: 'Mermaid', action: props.onInsertMermaid },
-    { label: 'Fórmula', action: props.onInsertMath },
-    { label: 'Enlace', action: props.onInsertLink }
+    { label: 'Fórmula Matemática', action: props.onInsertMath },
+    { label: 'Cita', action: props.onInsertQuote }
   ]
 
   const herramientas: MenuAction[] = [

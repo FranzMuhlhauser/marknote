@@ -18,7 +18,10 @@ const api = {
   rename: (oldPath: string, newPath: string) => ipcRenderer.invoke('file:rename', oldPath, newPath),
   duplicate: (filePath: string) => ipcRenderer.invoke('file:duplicate', filePath),
   deleteFile: (filePath: string) => ipcRenderer.invoke('file:delete', filePath),
-  moveFile: (oldPath: string, newPath: string) => ipcRenderer.invoke('file:move', oldPath, newPath)
+  moveFile: (oldPath: string, newPath: string) => ipcRenderer.invoke('file:move', oldPath, newPath),
+  onOpenFile: (callback: (filePath: string) => void) => {
+    ipcRenderer.on('file:open', (_event, filePath) => callback(filePath))
+  }
 }
 
 contextBridge.exposeInMainWorld('api', api)

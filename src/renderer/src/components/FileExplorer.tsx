@@ -10,6 +10,8 @@ interface FileExplorerProps {
   currentFile: string | null
   onOpenFile: (path: string) => void
   onOpenFolder: () => void
+  onOpenFileFromDisk: () => void
+  onNewDoc: () => void
   onClose: () => void
 }
 
@@ -137,7 +139,7 @@ function FileItem({ path, currentFile, onOpen, showStar, onRename, onDelete, onD
   )
 }
 
-export function FileExplorer({ folder, currentFile, onOpenFile, onOpenFolder, onClose }: FileExplorerProps) {
+export function FileExplorer({ folder, currentFile, onOpenFile, onOpenFolder, onOpenFileFromDisk, onNewDoc, onClose }: FileExplorerProps) {
   const [files, setFiles] = useState<FileEntry[]>([])
   const [loading, setLoading] = useState(false)
   const [favorites, setFavorites] = useState<string[]>(getFavorites)
@@ -145,8 +147,6 @@ export function FileExplorer({ folder, currentFile, onOpenFile, onOpenFolder, on
   const [trash, setTrash] = useState<string[]>(getTrash)
   const [renaming, setRenaming] = useState<string | null>(null)
   const [renameValue, setRenameValue] = useState('')
-  const [creating, setCreating] = useState<'file' | 'folder' | null>(null)
-  const [createValue, setCreateValue] = useState('')
   const [refreshKey, setRefreshKey] = useState(0)
   const [fileError, setFileError] = useState<string | null>(null)
 
@@ -216,21 +216,6 @@ export function FileExplorer({ folder, currentFile, onOpenFile, onOpenFolder, on
     } catch (e) { console.error('Delete error:', e) }
   }, [refreshLists])
 
-  const handleCreate = useCallback(async () => {
-    if (!folder || !createValue.trim()) { setCreating(null); return }
-    try {
-      if (creating === 'folder') {
-        await window.api.createFolder(folder, createValue.trim())
-      } else {
-        const filePath = `${folder}\\${createValue.trim()}.md`
-        await window.api.writeFile(filePath, `# ${createValue.trim()}\n\n`)
-      }
-      setRefreshKey(k => k + 1)
-    } catch (e) { console.error('Create error:', e) }
-    setCreating(null)
-    setCreateValue('')
-  }, [folder, creating, createValue])
-
   const handleDropFile = useCallback(async (sourcePath: string) => {
     if (!folder) return
     const name = sourcePath.split('\\').pop() || ''
@@ -248,34 +233,13 @@ export function FileExplorer({ folder, currentFile, onOpenFile, onOpenFolder, on
       <div className="file-explorer-header">
         <span className="file-explorer-title">{folder ? folderName : 'Explorador'}</span>
         <div className="file-explorer-header-actions">
-          {folder && (
-            <>
-              <button className="toolbar-btn" onClick={() => { setCreating('file'); setCreateValue('') }} title="Nuevo archivo">📄+</button>
-              <button className="toolbar-btn" onClick={() => { setCreating('folder'); setCreateValue('') }} title="Nueva carpeta">📁+</button>
-            </>
-          )}
-          <button className="toolbar-btn" onClick={onOpenFolder} title="Abrir carpeta">📂</button>
-          <button className="toolbar-btn" onClick={onClose} title="Cerrar">✕</button>
+          <button className="toolbar-btn" onClick={onOpenFolder} title="Abrir carpeta" aria-label="Abrir carpeta">📂</button>
+          <button className="toolbar-btn" onClick={onOpenFileFromDisk} title="Abrir archivo" aria-label="Abrir archivo">📄</button>
+          <button className="toolbar-btn" onClick={onNewDoc} title="Nuevo documento" aria-label="Nuevo documento">➕</button>
+          <button className="toolbar-btn" onClick={onClose} title="Ocultar explorador" aria-label="Ocultar explorador">✕</button>
         </div>
       </div>
       <div className="file-explorer-list">
-        {/* Create inline form */}
-        {creating && (
-          <div className="file-explorer-item" style={{ cursor: 'default' }}>
-            <span className="file-icon">{creating === 'folder' ? '📁' : '📄'}</span>
-            <input
-              className="explorer-inline-input"
-              value={createValue}
-              onChange={e => setCreateValue(e.target.value)}
-              onKeyDown={e => { if (e.key === 'Enter') handleCreate(); if (e.key === 'Escape') setCreating(null) }}
-              onBlur={handleCreate}
-              placeholder={creating === 'folder' ? 'folder name' : 'file name'}
-              autoFocus
-            />
-            {creating === 'file' && <span style={{ fontSize: 12, color: 'var(--placeholder)' }}>.md</span>}
-          </div>
-        )}
-
         <Section title="Favoritos" icon="★">
           {favorites.length === 0 ? (
             <div className="file-explorer-empty">Sin favoritos</div>
@@ -312,7 +276,7 @@ export function FileExplorer({ folder, currentFile, onOpenFile, onOpenFolder, on
               <div className="file-explorer-empty">Cargando...</div>
             ) : fileError ? (
               <div className="file-explorer-error">{fileError}</div>
-            ) : files.length === 0 && !creating ? (
+            ) : files.length === 0 ? (
               <div className="file-explorer-empty">No hay archivos .md</div>
             ) : (
               files.map(f => (

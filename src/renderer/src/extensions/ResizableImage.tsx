@@ -1,5 +1,5 @@
 import { Node, mergeAttributes } from '@tiptap/core'
-import { ReactNodeViewRenderer } from '@tiptap/react'
+import { NodeViewWrapper, ReactNodeViewRenderer } from '@tiptap/react'
 import { useCallback, useRef, useState, useEffect } from 'react'
 
 export const ResizableImage = Node.create({
@@ -93,6 +93,7 @@ function ImageComponent({ node, updateAttributes, editor }: any) {
   }, [node.attrs.alt])
 
   return (
+    <NodeViewWrapper>
     <div
       className={`resizable-image-wrapper align-${align}`}
       contentEditable={false}
@@ -118,17 +119,17 @@ function ImageComponent({ node, updateAttributes, editor }: any) {
           <button
             className={`image-toolbar-btn ${align === 'left' ? 'active' : ''}`}
             onClick={() => setAlignment('left')}
-            title="Align left"
+            title="Alinear izquierda"
           >⫷</button>
           <button
             className={`image-toolbar-btn ${align === 'center' ? 'active' : ''}`}
             onClick={() => setAlignment('center')}
-            title="Align center"
+            title="Alinear centro"
           >⫿</button>
           <button
             className={`image-toolbar-btn ${align === 'right' ? 'active' : ''}`}
             onClick={() => setAlignment('right')}
-            title="Align right"
+            title="Alinear derecha"
           >⫸</button>
           <button
             className="image-toolbar-btn"
@@ -136,12 +137,12 @@ function ImageComponent({ node, updateAttributes, editor }: any) {
               setSizeInput({ width: node.attrs.width || '', height: node.attrs.height || '' })
               setEditingSize(true)
             }}
-            title="Resize"
+            title="Redimensionar"
           >⤡</button>
           <button
             className="image-toolbar-btn"
             onClick={handleDoubleClick}
-            title="Alt text"
+            title="Texto alternativo"
           >🖉</button>
         </div>
       </div>
@@ -159,8 +160,8 @@ function ImageComponent({ node, updateAttributes, editor }: any) {
               autoFocus
             />
             <div className="image-alt-actions">
-              <button className="toolbar-btn" onClick={handleAltSave}>Save</button>
-              <button className="toolbar-btn" onClick={() => setShowAltInput(false)}>Cancel</button>
+              <button className="toolbar-btn" onClick={handleAltSave}>Guardar</button>
+              <button className="toolbar-btn" onClick={() => setShowAltInput(false)}>Cancelar</button>
             </div>
           </div>
         </div>
@@ -170,31 +171,32 @@ function ImageComponent({ node, updateAttributes, editor }: any) {
       {editingSize && (
         <div className="image-alt-input-overlay" onClick={() => handleSizeSave()}>
           <div className="image-alt-input-box" onClick={e => e.stopPropagation()}>
-            <label className="image-alt-label">Dimensions:</label>
+            <label className="image-alt-label">Dimensiones:</label>
             <div className="image-size-row">
               <input
                 className="image-alt-input"
                 type="number"
-                placeholder="Width"
-                value={sizeInput.width}
-                onChange={e => setSizeInput(p => ({ ...p, width: e.target.value }))}
-              />
-              <span>×</span>
-              <input
-                className="image-alt-input"
-                type="number"
-                placeholder="Height"
+                placeholder="Ancho"
+                 value={sizeInput.width}
+                 onChange={e => setSizeInput(p => ({ ...p, width: e.target.value }))}
+               />
+               <span>×</span>
+               <input
+                 className="image-alt-input"
+                 type="number"
+                 placeholder="Alto"
                 value={sizeInput.height}
                 onChange={e => setSizeInput(p => ({ ...p, height: e.target.value }))}
               />
             </div>
             <div className="image-alt-actions">
-              <button className="toolbar-btn" onClick={handleSizeSave}>Save</button>
-              <button className="toolbar-btn" onClick={() => setEditingSize(false)}>Cancel</button>
+              <button className="toolbar-btn" onClick={handleSizeSave}>Guardar</button>
+              <button className="toolbar-btn" onClick={() => setEditingSize(false)}>Cancelar</button>
             </div>
           </div>
         </div>
       )}
     </div>
+    </NodeViewWrapper>
   )
 }

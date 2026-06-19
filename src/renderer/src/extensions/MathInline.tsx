@@ -1,5 +1,5 @@
 import { Node, mergeAttributes } from '@tiptap/core'
-import { ReactNodeViewRenderer } from '@tiptap/react'
+import { NodeViewWrapper, ReactNodeViewRenderer } from '@tiptap/react'
 
 export const MathInline = Node.create({
   name: 'mathInline',
@@ -21,15 +21,17 @@ export const MathInline = Node.create({
   },
 
   addNodeView() {
-    return ReactNodeViewRenderer(({ node }) => {
-      try {
-        const katex = (window as any).katex
-        if (katex && node.attrs.tex) {
-          const html = katex.renderToString(node.attrs.tex, { throwOnError: false })
-          return <span dangerouslySetInnerHTML={{ __html: html }} />
-        }
-      } catch {}
-      return <span className="math-inline-plain">{node.attrs.tex}</span>
-    })
+    return ReactNodeViewRenderer(MathInlineComponent)
   }
 })
+
+function MathInlineComponent({ node }: any) {
+  try {
+    const katex = (window as any).katex
+    if (katex && node.attrs.tex) {
+      const html = katex.renderToString(node.attrs.tex, { throwOnError: false })
+      return <NodeViewWrapper as="span"><span dangerouslySetInnerHTML={{ __html: html }} /></NodeViewWrapper>
+    }
+  } catch (e) {}
+  return <NodeViewWrapper as="span"><span className="math-inline-plain">{node.attrs.tex}</span></NodeViewWrapper>
+}

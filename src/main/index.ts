@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, dialog, shell } from 'electron'
+import { app, BrowserWindow, ipcMain, dialog, shell, Menu } from 'electron'
 import { join, dirname, basename, extname } from 'path'
 import { readFile, writeFile, readdir, mkdir, rename, copyFile, unlink } from 'fs/promises'
 import { autoUpdater } from 'electron-updater'
@@ -21,6 +21,11 @@ function createWindow(): void {
       preload: join(__dirname, '../preload/index.js'),
       sandbox: false
     }
+  })
+
+  mainWindow.webContents.on('console-message', (_event, level, message) => {
+    const tag = ['verbose', 'info', 'warn', 'error'][level] || 'log'
+    console.log(`[renderer:${tag}] ${message}`)
   })
 
   if (process.env.ELECTRON_RENDERER_URL) {
@@ -138,8 +143,31 @@ ipcMain.handle('app:quit', () => {
   app.quit()
 })
 
+const gotLock = app.requestSingleInstanceLock()
+if (!gotLock) {
+  console.warn('Another instance is running, forwarding arguments...')
+} else {
+  app.on('second-instance', (_event, argv) => {
+    const mdFile = argv.find(a => /\.md$/i.test(a))
+    if (mdFile && mainWindow) {
+      if (mainWindow.isMinimized()) mainWindow.restore()
+      mainWindow.focus()
+      send('file:open', mdFile)
+    }
+  })
+}
+
 app.whenReady().then(() => {
+  Menu.setApplicationMenu(null)
   createWindow()
+
+  const pendingFile = process.argv.find(a => /\.md$/i.test(a))
+  if (pendingFile && mainWindow) {
+    mainWindow.webContents.on('did-finish-load', () => {
+      send('file:open', pendingFile)
+    })
+  }
+
   try { autoUpdater.checkForUpdates() } catch { /* silent */ }
 })
 
@@ -149,4 +177,8 @@ app.on('window-all-closed', () => {
 
 app.on('activate', () => {
   if (BrowserWindow.getAllWindows().length === 0) createWindow()
+})
+
+app.on('open-file', (_event, filePath) => {
+  send('file:open', filePath)
 })

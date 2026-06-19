@@ -113,14 +113,14 @@ export function SearchReplace({ editor, onClose }: SearchReplaceProps) {
   return (
     <div className="search-replace">
       <div className="search-row">
-        <input ref={inputRef} type="text" placeholder="Search..." value={search} onChange={e => setSearch(e.target.value)} onKeyDown={e => e.key === 'Enter' && goTo(matchIdx + 1)} />
+        <input ref={inputRef} type="text" placeholder="Buscar..." value={search} onChange={e => setSearch(e.target.value)} onKeyDown={e => e.key === 'Enter' && goTo(matchIdx + 1)} />
         <span className="search-count">{matches.length > 0 ? `${matchIdx + 1}/${matches.length}` : ''}</span>
         <button className="toolbar-btn" onClick={() => goTo(matchIdx + 1)} title="Next">↓</button>
         <button className="toolbar-btn" onClick={() => goTo(matchIdx - 1)} title="Previous">↑</button>
         <button className="toolbar-btn" onClick={onClose} title="Close (Esc)">✕</button>
       </div>
       <div className="search-row">
-        <input type="text" placeholder="Replace..." value={replace} onChange={e => setReplace(e.target.value)} onKeyDown={e => e.key === 'Enter' && replaceOne()} />
+        <input type="text" placeholder="Reemplazar..." value={replace} onChange={e => setReplace(e.target.value)} onKeyDown={e => e.key === 'Enter' && replaceOne()} />
         <button className="toolbar-btn" onClick={replaceOne} title="Replace">R</button>
         <button className="toolbar-btn" onClick={replaceAll} title="Replace all">All</button>
       </div>

@@ -1,5 +1,6 @@
 import { useState, useCallback, useEffect, useRef } from 'react'
 import type { Editor } from '@tiptap/core'
+import { showPrompt } from '../utils/prompt'
 
 interface Cmd {
   id: string
@@ -26,7 +27,7 @@ const COMMANDS: Cmd[] = [
   { id: 'math-block', label: 'Bloque de fórmula', action: e => e.chain().focus().insertContent({ type: 'mathBlock', attrs: { tex: '' } }).run() },
   { id: 'mermaid', label: 'Diagrama Mermaid', action: e => e.chain().focus().insertContent({ type: 'mermaidBlock', attrs: { code: '' } }).run() },
   { id: 'hr', label: 'Línea horizontal', action: e => e.chain().focus().setHorizontalRule().run() },
-  { id: 'link', label: 'Insertar enlace', action: e => { const url = window.prompt('URL:'); if (url) e.chain().focus().setLink({ href: url }).run() } },
+  { id: 'link', label: 'Insertar enlace', action: async e => { const url = await showPrompt('URL:'); if (url) e.chain().focus().setLink({ href: url }).run() } },
   { id: 'image', label: 'Insertar imagen', action: e => {
     const input = document.createElement('input')
     input.type = 'file'; input.accept = 'image/*'

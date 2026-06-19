@@ -1,5 +1,31 @@
 import type { Editor } from '@tiptap/core'
-import { useCallback } from 'react'
+import {
+  FilePlus,
+  Save,
+  Undo2,
+  Redo2,
+  Bold,
+  Italic,
+  Underline,
+  Strikethrough,
+  Heading1,
+  Heading2,
+  Heading3,
+  List,
+  ListTodo,
+  Code,
+  Table,
+  Image,
+  Link,
+  Moon,
+  Focus,
+  FileCode,
+  Settings,
+  PanelLeft,
+  PanelLeftClose
+} from 'lucide-react'
+
+const iconProps = { size: 16, strokeWidth: 1.5 }
 
 interface ToolbarProps {
   editor: Editor | null
@@ -9,91 +35,65 @@ interface ToolbarProps {
   onFocusMode: () => void
   onToggleSource: () => void
   onSettings: () => void
+  onToggleExplorer: () => void
+  onInsertTable: () => void
+  onInsertImage: () => void
+  onInsertCode: () => void
+  onInsertLink: () => void
+  onInsertMath: () => void
+  onInsertVideo: () => void
   focusMode: boolean
   showSource: boolean
+  showExplorer: boolean
 }
 
-export function Toolbar({ editor, onNew, onSave, onToggleTheme, onFocusMode, onToggleSource, onSettings, focusMode, showSource }: ToolbarProps) {
+export function Toolbar({ editor, onNew, onSave, onToggleTheme, onFocusMode, onToggleSource, onSettings, onToggleExplorer, onInsertTable, onInsertImage, onInsertCode, onInsertLink, onInsertMath, onInsertVideo, focusMode, showSource, showExplorer }: ToolbarProps) {
   if (!editor) return null
-
-  const addTable = useCallback(() => {
-    editor.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run()
-  }, [editor])
-
-  const addMathInline = useCallback(() => {
-    editor.chain().focus().insertContent({ type: 'mathInline', attrs: { tex: 'E = mc^2' } }).run()
-  }, [editor])
-
-  const addMathBlock = useCallback(() => {
-    editor.chain().focus().insertContent({ type: 'mathBlock', attrs: { tex: '' } }).run()
-  }, [editor])
-
-  const addMermaid = useCallback(() => {
-    editor.chain().focus().insertContent({ type: 'mermaidBlock', attrs: { code: '' } }).run()
-  }, [editor])
-
-  const setLink = useCallback(() => {
-    const url = window.prompt('URL:')
-    if (url) editor.chain().focus().setLink({ href: url }).run()
-  }, [editor])
-
-  const insertImage = useCallback(() => {
-    const input = document.createElement('input')
-    input.type = 'file'
-    input.accept = 'image/*'
-    input.onchange = () => {
-      const file = input.files?.[0]
-      if (!file) return
-      const reader = new FileReader()
-      reader.onload = () => {
-        editor.chain().focus().setImage({ src: reader.result as string }).run()
-      }
-      reader.readAsDataURL(file)
-    }
-    input.click()
-  }, [editor])
 
   return (
     <div className="toolbar">
       <div className="toolbar-group">
-        <button className="toolbar-btn" onClick={onNew} title="Nuevo (Ctrl+N)">Nuevo</button>
-        <button className="toolbar-btn" onClick={onSave} title="Guardar (Ctrl+S)">Guardar</button>
+        <button className="toolbar-btn" onClick={onNew} title="Nuevo (Ctrl+N)"><FilePlus {...iconProps} /></button>
+        <button className="toolbar-btn" onClick={onSave} title="Guardar (Ctrl+S)"><Save {...iconProps} /></button>
       </div>
       <div className="toolbar-sep" />
       <div className="toolbar-group">
-        <button className="toolbar-btn" onClick={() => editor.chain().focus().undo().run()} title="Deshacer (Ctrl+Z)">↶</button>
-        <button className="toolbar-btn" onClick={() => editor.chain().focus().redo().run()} title="Rehacer (Ctrl+Y)">↷</button>
+        <button className="toolbar-btn" onClick={() => editor.chain().focus().undo().run()} title="Deshacer (Ctrl+Z)"><Undo2 {...iconProps} /></button>
+        <button className="toolbar-btn" onClick={() => editor.chain().focus().redo().run()} title="Rehacer (Ctrl+Y)"><Redo2 {...iconProps} /></button>
       </div>
       <div className="toolbar-sep" />
       <div className="toolbar-group">
-        <button className="toolbar-btn" onClick={() => editor.chain().focus().toggleBold().run()} data-active={editor.isActive('bold')} title="Negrita (Ctrl+B)"><strong>B</strong></button>
-        <button className="toolbar-btn" onClick={() => editor.chain().focus().toggleItalic().run()} data-active={editor.isActive('italic')} title="Cursiva (Ctrl+I)"><em>I</em></button>
-        <button className="toolbar-btn" onClick={() => editor.chain().focus().toggleUnderline().run()} data-active={editor.isActive('underline')} title="Subrayado (Ctrl+U)"><u>U</u></button>
-        <button className="toolbar-btn" onClick={() => editor.chain().focus().toggleStrike().run()} data-active={editor.isActive('strike')} title="Tachado"><s>S</s></button>
+        <button className="toolbar-btn" onClick={() => editor.chain().focus().toggleBold().run()} data-active={editor.isActive('bold')} title="Negrita (Ctrl+B)"><Bold {...iconProps} /></button>
+        <button className="toolbar-btn" onClick={() => editor.chain().focus().toggleItalic().run()} data-active={editor.isActive('italic')} title="Cursiva (Ctrl+I)"><Italic {...iconProps} /></button>
+        <button className="toolbar-btn" onClick={() => editor.chain().focus().toggleUnderline().run()} data-active={editor.isActive('underline')} title="Subrayado (Ctrl+U)"><Underline {...iconProps} /></button>
+        <button className="toolbar-btn" onClick={() => editor.chain().focus().toggleStrike().run()} data-active={editor.isActive('strike')} title="Tachado"><Strikethrough {...iconProps} /></button>
       </div>
       <div className="toolbar-sep" />
       <div className="toolbar-group">
-        <button className="toolbar-btn" onClick={() => editor.chain().focus().toggleHeading({ level: 1 }).run()} data-active={editor.isActive('heading', { level: 1 })} title="Encabezado 1">H1</button>
-        <button className="toolbar-btn" onClick={() => editor.chain().focus().toggleHeading({ level: 2 }).run()} data-active={editor.isActive('heading', { level: 2 })} title="Encabezado 2">H2</button>
-        <button className="toolbar-btn" onClick={() => editor.chain().focus().toggleHeading({ level: 3 }).run()} data-active={editor.isActive('heading', { level: 3 })} title="Encabezado 3">H3</button>
-        <button className="toolbar-btn" onClick={() => editor.chain().focus().toggleBulletList().run()} data-active={editor.isActive('bulletList')} title="Lista">•</button>
-        <button className="toolbar-btn" onClick={() => editor.chain().focus().toggleTaskList().run()} data-active={editor.isActive('taskList')} title="Lista de tareas">☑</button>
+        <button className="toolbar-btn" onClick={() => editor.chain().focus().toggleHeading({ level: 1 }).run()} data-active={editor.isActive('heading', { level: 1 })} title="Encabezado 1"><Heading1 {...iconProps} /></button>
+        <button className="toolbar-btn" onClick={() => editor.chain().focus().toggleHeading({ level: 2 }).run()} data-active={editor.isActive('heading', { level: 2 })} title="Encabezado 2"><Heading2 {...iconProps} /></button>
+        <button className="toolbar-btn" onClick={() => editor.chain().focus().toggleHeading({ level: 3 }).run()} data-active={editor.isActive('heading', { level: 3 })} title="Encabezado 3"><Heading3 {...iconProps} /></button>
+        <button className="toolbar-btn" onClick={() => editor.chain().focus().toggleBulletList().run()} data-active={editor.isActive('bulletList')} title="Lista"><List {...iconProps} /></button>
+        <button className="toolbar-btn" onClick={() => editor.chain().focus().toggleTaskList().run()} data-active={editor.isActive('taskList')} title="Lista de tareas"><ListTodo {...iconProps} /></button>
       </div>
       <div className="toolbar-sep" />
       <div className="toolbar-group">
-        <button className="toolbar-btn" onClick={() => editor.chain().focus().toggleCodeBlock().run()} data-active={editor.isActive('codeBlock')} title="Código">{'{}'}</button>
-        <button className="toolbar-btn" onClick={addTable} title="Tabla">⊞</button>
-        <button className="toolbar-btn" onClick={insertImage} title="Imagen">🖼</button>
-        <button className="toolbar-btn" onClick={setLink} data-active={editor.isActive('link')} title="Enlace">🔗</button>
-        <button className="toolbar-btn" onClick={addMermaid} title="Mermaid">◈</button>
-        <button className="toolbar-btn" onClick={addMathBlock} title="LaTeX">∫</button>
+        <button className="toolbar-btn" onClick={onInsertCode} data-active={editor.isActive('codeBlock')} title="Código"><Code {...iconProps} /></button>
+        <button className="toolbar-btn" onClick={onInsertTable} title="Tabla"><Table {...iconProps} /></button>
+        <button className="toolbar-btn" onClick={onInsertImage} title="Imagen"><Image {...iconProps} /></button>
+        <button className="toolbar-btn" onClick={onInsertLink} data-active={editor.isActive('link')} title="Enlace"><Link {...iconProps} /></button>
+        <button className="toolbar-btn" onClick={onInsertMath} title="Fórmula"><span style={{fontSize:18, lineHeight:1}}>∫</span></button>
+        <button className="toolbar-btn" onClick={onInsertVideo} title="Video"><span style={{fontSize:18, lineHeight:1}}>▶</span></button>
       </div>
       <div className="toolbar-sep" />
       <div className="toolbar-group">
-        <button className="toolbar-btn" onClick={onToggleTheme} title="Tema">◐</button>
-        <button className="toolbar-btn" onClick={onFocusMode} data-active={focusMode} title="Modo Enfoque">◎</button>
-        <button className="toolbar-btn" onClick={onToggleSource} title={showSource ? 'Vista WYSIWYG' : 'Vista fuente'}>{showSource ? '📝' : '📄'}</button>
-        <button className="toolbar-btn" onClick={onSettings} title="Configuración">⚙</button>
+        <button className="toolbar-btn" onClick={onToggleExplorer} data-active={showExplorer} title={showExplorer ? 'Ocultar explorador (Ctrl+B)' : 'Mostrar explorador (Ctrl+B)'}>
+          {showExplorer ? <PanelLeftClose {...iconProps} /> : <PanelLeft {...iconProps} />}
+        </button>
+        <button className="toolbar-btn" onClick={onToggleTheme} title="Tema"><Moon {...iconProps} /></button>
+        <button className="toolbar-btn" onClick={onFocusMode} data-active={focusMode} title={focusMode ? 'Salir del modo enfoque' : 'Modo enfoque'}><Focus {...iconProps} /></button>
+        <button className="toolbar-btn" onClick={onToggleSource} data-active={showSource} title={showSource ? 'Vista WYSIWYG' : 'Vista fuente'}><FileCode {...iconProps} /></button>
+        <button className="toolbar-btn" onClick={onSettings} title="Configuración"><Settings {...iconProps} /></button>
       </div>
     </div>
   )

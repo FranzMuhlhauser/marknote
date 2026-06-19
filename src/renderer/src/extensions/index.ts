@@ -18,6 +18,12 @@ import { MermaidBlock } from './MermaidBlock'
 import { CurrentLineHighlight } from './CurrentLineHighlight'
 import { CodeBlock } from './CodeBlock'
 import { ResizableImage } from './ResizableImage'
+import { VideoBlock } from './VideoBlock'
+import { SlashCommand } from './SlashCommand'
+import { BoldItalic } from './BoldItalic'
+import { TableSort, tableSortKey } from './TableSort'
+
+export { tableSortKey }
 
 const lowlight = createLowlight(common)
 
@@ -28,13 +34,13 @@ export function getExtensions() {
       codeBlock: false,
       history: { depth: 100 }
     }),
-    Placeholder.configure({ placeholder: 'Start writing...' }),
+    Placeholder.configure({ placeholder: 'Empieza a escribir...' }),
     Underline,
     Link.configure({ openOnClick: false, HTMLAttributes: { class: 'editor-link' } }),
     Typography,
     TaskList,
     TaskItem.configure({ nested: true }),
-    Table.configure({ resizable: true }),
+    Table.configure({ resizable: false }),
     TableRow,
     TableCell,
     TableHeader,
@@ -45,6 +51,10 @@ export function getExtensions() {
     MathInline,
     MathBlock,
     MermaidBlock,
-    CurrentLineHighlight
+    VideoBlock,
+    SlashCommand,
+    BoldItalic,
+    CurrentLineHighlight,
+    TableSort
   ]
 }
