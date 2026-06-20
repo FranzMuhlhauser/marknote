@@ -51,13 +51,13 @@ if ($gitStatus -and $Force) {
 }
 
 # ─── 6. Verificar que los artefactos existan ─────────────────────────
-$exe = Get-ChildItem "$distDir\Marknote-*-Setup.exe" | Select-Object -First 1
-$blockmap = Get-ChildItem "$distDir\Marknote-*-Setup.exe.blockmap" | Select-Object -First 1
+$exe = Get-ChildItem "$distDir\Marknote-$version-Setup.exe" | Select-Object -First 1
+$blockmap = Get-ChildItem "$distDir\Marknote-$version-Setup.exe.blockmap" | Select-Object -First 1
 $latestYml = "$distDir\latest.yml"
 
 $missingArtifacts = @()
-if (-not $exe) { $missingArtifacts += "Marknote-*-Setup.exe" }
-if (-not $blockmap) { $missingArtifacts += "Marknote-*-Setup.exe.blockmap" }
+if (-not $exe) { $missingArtifacts += "Marknote-$version-Setup.exe" }
+if (-not $blockmap) { $missingArtifacts += "Marknote-$version-Setup.exe.blockmap" }
 if (-not (Test-Path $latestYml)) { $missingArtifacts += "latest.yml" }
 
 if ($missingArtifacts.Count -gt 0) {
