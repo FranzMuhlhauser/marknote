@@ -12,7 +12,9 @@
     "lint": "eslint . --ext .ts,.tsx",
     "typecheck": "tsc --noEmit",
     "package": "electron-vite build && electron-builder",
-    "package:win": "electron-vite build && electron-builder --win"
+    "package:win": "electron-vite build && electron-builder --win",
+    "build:win": "electron-vite build && electron-builder --win",
+    "release": "PowerShell -ExecutionPolicy Bypass -File scripts/release.ps1"
   },
   "dependencies": {
     "@tiptap/core": "^2.11.5",
