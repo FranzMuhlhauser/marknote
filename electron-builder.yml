@@ -5,7 +5,6 @@ directories:
   output: dist-electron
 files:
   - out/**/*
-  - "!node_modules/**/*"
 win:
   icon: resources/icon.ico
   target:
