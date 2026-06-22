@@ -10,7 +10,6 @@ interface SettingsProps {
 }
 
 export function Settings({ theme, fontSize, onThemeChange, onFontSizeChange, onClose }: SettingsProps) {
-  const [autoSave, setAutoSave] = useState(() => localStorage.getItem('marknote-autosave') !== 'false')
   const [showCustomTheme, setShowCustomTheme] = useState(false)
   const [customTheme, setCustomTheme] = useState<CustomTheme>(() => {
     const saved = localStorage.getItem('marknote-custom-theme')
@@ -23,11 +22,6 @@ export function Settings({ theme, fontSize, onThemeChange, onFontSizeChange, onC
       codeBg: '#f0f0f0'
     }
   })
-
-  const handleAutoSaveChange = (val: boolean) => {
-    setAutoSave(val)
-    localStorage.setItem('marknote-autosave', String(val))
-  }
 
   const applyCustomTheme = () => {
     const root = document.documentElement
@@ -149,10 +143,6 @@ export function Settings({ theme, fontSize, onThemeChange, onFontSizeChange, onC
               onChange={e => onFontSizeChange(Number(e.target.value))}
               className="settings-range"
             />
-            <label className="settings-checkbox" style={{ marginTop: 8, display: 'flex', alignItems: 'center', gap: 6 }}>
-              <input type="checkbox" checked={autoSave} onChange={e => handleAutoSaveChange(e.target.checked)} />
-              <span>Auto-guardado cada 30s</span>
-            </label>
           </section>
 
           <section className="settings-section">

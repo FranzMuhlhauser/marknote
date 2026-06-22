@@ -30,14 +30,6 @@ interface MenuBarProps {
   onFocusMode: () => void
   onFullscreen: () => void
   onToggleOutline: () => void
-  onInsertTable: () => void
-  onInsertImage: () => void
-  onInsertCode: () => void
-  onInsertMermaid: () => void
-  onInsertMath: () => void
-  onInsertLink: () => void
-  onInsertQuote: () => void
-  onInsertVideo: () => void
   onSettings: () => void
   onStats: () => void
   onCommandPalette: () => void
@@ -82,6 +74,8 @@ export function MenuBar(props: MenuBarProps) {
     { label: 'Exportar HTML', action: props.onExportHtml },
     { label: 'Exportar PDF', action: props.onExportPdf },
     { separator: true, label: '' },
+    { label: 'Configuración', action: props.onSettings },
+    { separator: true, label: '' },
     { label: 'Salir', shortcut: 'Alt+F4', action: props.onQuit }
   ]
 
@@ -104,22 +98,8 @@ export function MenuBar(props: MenuBarProps) {
     { label: props.focusMode ? 'Salir Modo Enfoque' : 'Modo Enfoque', action: props.onFocusMode },
     { label: 'Pantalla Completa', shortcut: 'F11', action: props.onFullscreen },
     { separator: true, label: '' },
-    { label: props.showOutline ? 'Ocultar Índice' : 'Mostrar Índice', action: props.onToggleOutline }
-  ]
-
-  const insertar: MenuAction[] = [
-    { label: 'Tabla', action: props.onInsertTable },
-    { label: 'Imagen', action: props.onInsertImage },
-    { label: 'Video', action: props.onInsertVideo },
-    { label: 'Enlace', action: props.onInsertLink },
-    { label: 'Bloque de Código', action: props.onInsertCode },
-    { label: 'Mermaid', action: props.onInsertMermaid },
-    { label: 'Fórmula Matemática', action: props.onInsertMath },
-    { label: 'Cita', action: props.onInsertQuote }
-  ]
-
-  const herramientas: MenuAction[] = [
-    { label: 'Configuración', action: props.onSettings },
+    { label: props.showOutline ? 'Ocultar Índice' : 'Mostrar Índice', action: props.onToggleOutline },
+    { separator: true, label: '' },
     { label: 'Estadísticas', action: props.onStats }
   ]
 
@@ -133,8 +113,6 @@ export function MenuBar(props: MenuBarProps) {
       <MenuDropdown label="Archivo" items={archivo} />
       <MenuDropdown label="Editar" items={editar} />
       <MenuDropdown label="Ver" items={ver} />
-      <MenuDropdown label="Insertar" items={insertar} />
-      <MenuDropdown label="Herramientas" items={herramientas} />
       <MenuDropdown label="Ayuda" items={ayuda} />
       <div className="menubar-spacer" />
       {updateStatus?.status === 'available' && (

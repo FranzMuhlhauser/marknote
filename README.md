@@ -15,6 +15,9 @@
   </p>
 </div>
 
+> **Principio Rector de Marknote**  
+> Marknote es un editor Markdown que combina la comodidad de una interfaz gráfica con el aprendizaje progresivo. Los botones están ahí para ayudarte hoy, pero el objetivo es que mañana domines Markdown y los necesites cada vez menos.
+
 ---
 
 ## Captura
@@ -23,7 +26,7 @@
 ┌──────────────────────────────────────────────────────┐
 │  Titlebar                                 [📄] [⬇]  │
 ├──────────────────────────────────────────────────────┤
-│  [Archivo] [Editar] [Ver] [Insertar] [Herramientas]  │
+│  [Archivo] [Editar] [Ver] [Ayuda]                    │
 ├──────────────────────────────────────────────────────┤
 │  Toolbar: Archivo | Edición | Formato | Vista        │
 ├──────────────────────────────────────────────────────┤
@@ -185,9 +188,9 @@ El comando `package:win` genera un instalador NSIS en `dist-electron/`.
 - [x] Imágenes redimensionables con alineación y alt text
 - [x] Menú contextual en tablas
 - [x] Exportar HTML y PDF
-- [ ] Menú contextual en tablas (añadir/eliminar filas/columnas)
-- [ ] Bloques de código con copiar/colapsar
-- [ ] Atajos de navegación entre pestañas (Ctrl+Tab)
+- [x] Menú contextual en tablas (añadir/eliminar filas/columnas)
+- [x] Bloques de código con copiar/colapsar
+- [x] Atajos de navegación entre pestañas (Ctrl+Tab)
 - [ ] Buscador de archivos en el explorador
 - [ ] Plugins: sistema de extensiones
 - [ ] Temas comunitarios

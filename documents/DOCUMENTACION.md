@@ -63,7 +63,7 @@ marknote/
 │           │   ├── CodeBlock.tsx      # Bloque de código con copiar/colapsar (lowlight)
 │           │   └── ResizableImage.tsx # Imagen con redimensionar, alinear y texto alternativo
 │           ├── components/
-│           │   ├── MenuBar.tsx        # Barra de menú (Archivo, Editar, Ver, Insertar, Herramientas, Ayuda)
+│           │   ├── MenuBar.tsx        # Barra de menú (Archivo, Editar, Ver, Ayuda)
 │           │   ├── Toolbar.tsx        # Barra de herramientas (formato, inserción, vista)
 │           │   ├── TabBar.tsx         # Pestañas con arrastre y menú contextual
 │           │   ├── FileExplorer.tsx   # Explorador de archivos con operaciones avanzadas
@@ -102,8 +102,8 @@ La aplicación sigue un diseño de **3 columnas**:
 
 ```
 ┌─────────────────────────────────────────────────────┐
-│  [📝 Documento ●] [Archivo] [Editar] [Ver] [Insertar] │
-│  [Herramientas] [Ayuda]              [⬇ vX.X.X]   │
+│  [📝 Documento ●] [Archivo] [Editar] [Ver] [Ayuda]    │
+│                                    [⬇ vX.X.X]   │
 │  (barra unificada — título + menú + actualización)  │
 ├─────────────────────────────────────────────────────┤
 │  Toolbar: Archivo | Edición | Formato | Vista       │
@@ -138,7 +138,7 @@ La aplicación sigue un diseño de **3 columnas**:
 
 ### Layout y Navegación
 - **Layout 3 columnas**: Explorador izquierdo (240px) + Editor central + Índice derecho (Outline)
-- **Barra de menú unificada** (TitleBar + Menú): muestra título del documento + indicador de modificado + menús Archivo, Editar, Ver, Insertar, Herramientas, Ayuda — todos con atajos de teclado. Incluye botón de actualización cuando hay nueva versión. La zona del título funciona como agarre para arrastrar la ventana.
+- **Barra de menú unificada** (TitleBar + Menú): muestra título del documento + indicador de modificado + menús Archivo, Editar, Ver, Ayuda — todos con atajos de teclado. Incluye botón de actualización cuando hay nueva versión. La zona del título funciona como agarre para arrastrar la ventana. Los comandos de inserción (tabla, imagen, video, etc.) se acceden desde la barra de herramientas, la paleta de comandos (Ctrl+Shift+P) o el menú slash (/).
 - **Barra de herramientas** agrupada en 6 categorías: Archivo, Edición, Formato, Estructura, Contenido, Vista. Se quitó el botón de pantalla completa del toolbar; el toggle vista fuente se movió al toolbar
 - **Sistema de pestañas** (TabBar) con soporte para múltiples documentos abiertos simultáneamente
 - **Reordenar pestañas** por arrastrar y soltar (HTML5 DnD), con indicador visual de posición
@@ -263,7 +263,7 @@ La aplicación sigue un diseño de **3 columnas**:
 - Ventana sin bordes del sistema operativo
 
 ### Configuración
-- Panel modal accesible desde menú Herramientas o botón ⚙ en toolbar
+- Panel modal accesible desde menú Archivo > Configuración o botón ⚙ en toolbar
 - Secciones:
   - **Apariencia**: selector de temas con botones, editor de tema personalizado (6 colores)
   - **Editor**: slider de tamaño de fuente (14-22px), toggle de autoguardado
@@ -272,7 +272,7 @@ La aplicación sigue un diseño de **3 columnas**:
 
 ### Estadísticas
 - Panel lateral con: caracteres, palabras, líneas, párrafos, encabezados, tiempo de lectura
-- Toggle desde menú Herramientas
+- Toggle desde menú Ver > Estadísticas
 
 ### Exportación
 - **Exportar a HTML**: descarga como archivo .html con estilos básicos inline
@@ -682,8 +682,113 @@ Electron Main Process (src/main/index.ts)
 2. **Resolver problemas conocidos**: Especialmente sincronización de vista fuente al cambiar de pestaña y limpieza de decoraciones de búsqueda
 3. **Sistema de plugins**: Arquitectura para extensiones cargables dinámicamente
 4. **Temas comunitarios**: Importar/exportar temas como archivos JSON
-5. **Ctrl+Tab**: Navegación por pestañas con orden de uso reciente (MRU)
+5. **Ctrl+Tab**: Navegación por pestañas con orden de uso reciente (MRU) — *Ya implementado básico, pendiente MRU*
 6. **Buscador de archivos**: En el explorador lateral
+
+---
+
+## Diferencias entre Documentación e Implementación Real
+
+| # | Documentación dice | Realidad | Estado |
+|---|---|---|---|
+| 1 | `markdown.ts` usa plugins `markdown-it-sub`, `markdown-it-sup`, `markdown-it-footnote`, `markdown-it-mark`, `markdown-it-ins`, `markdown-it-kbd` | `markdown.ts:4` — solo `new MarkdownIt({...})` sin plugins adicionales. Esas 6 dependencias **no existen** en `package.json`. | ❌ Doc incorrecta |
+| 2 | `package.json` version = v0.3.1 | `"version": "0.1.2"` — desactualizada respecto al historial documentado | ⚠️ Desincronizado |
+| 3 | "Toggle Auto-save" en Settings controla el intervalo de 30s | `App.tsx:241-245`: el `useEffect` de autoguardado se ejecuta **siempre** que `activeTab?.modified` es true, sin verificar la preferencia del usuario | 🐛 Bug |
+| 4 | Workspace folder se persiste entre sesiones | No hay persistencia (`localStorage` ni archivo de config), se pierde al reiniciar | ⚠️ No implementado |
+| 5 | `lang="en"` en HTML (doc implícito) | `index.html:3`: `lang="en"` pero toda la UI está en español | ⚠️ Inconsistencia |
+| 6 | Ctrl+Tab listado como [ ] en Roadmap (README) | `App.tsx:480-489` — Ctrl+Tab **ya está implementado** (navegación circular) | ⚠️ Roadmap desactualizado |
+| 7 | Menú contextual tablas como [ ] en Roadmap (README) | Implementado desde v0.2.0 | ⚠️ Roadmap desactualizado |
+| 8 | SearchReplace decoraciones "no se limpian al cerrar" (problema conocido) | El plugin se registra/desregistra con `useEffect` en `SearchReplace.tsx`; las decoraciones se limpian al desmontar | ✅ Resuelto |
+| 9 | `@tiptap/extension-image` como dependencia | No se usa en ningún import; `ResizableImage.tsx` extiende el nodo `image` con nombre propio | ♻️ Innecesaria |
+
+---
+
+## Observaciones de Arquitectura (2026-06-22)
+
+### Puntos Fuertes
+- **Separación clara** Main ↔ Preload ↔ Renderer con `contextBridge`
+- **Estado centralizado** en `App.tsx` con `TabDoc[]` minimiza la complejidad del flujo de datos
+- **Extensiones TipTap personalizadas** con `ReactNodeViewRenderer` bien encapsuladas
+- **Sistema de temas basado en CSS variables** permite 6 temas + personalizado sin recarga
+- **FileExplorer con 4 secciones** y operaciones CRUD completas vía IPC
+
+### Deuda Técnica
+- **App.tsx monolítico** (677 líneas): mezcla estado global, lógica de editor, handlers de teclado, y layout JSX. Dificulta testing y mantenimiento.
+- **CSS global** (~1400 líneas sin revisar): estilos planos sin modules, 6 temas inline. Riesgo de colisiones y dificultad para escalar.
+- **Flujo de pestañas frágil**: el flag `switchingTab` con `setTimeout(50ms)` es un hack temporal. Podría fallar en condiciones de latencia alta.
+- **SlashCommand usa `createRoot()` directo** en vez de integración React estándar, potencial conflicto con StrictMode.
+- **Auto-save toggle sin efecto**: la UI muestra el control pero el backend no lo respeta.
+- **Tema personalizado duplica lógica** entre `themes.ts:saveTheme()` y `Settings.tsx:applyCustomTheme()` con el mismo conjunto de propiedades CSS.
+
+### Riesgos de Modificación
+1. **App.tsx**: Cualquier cambio en el sistema de pestañas requiere probar todas las funciones de cierre (closeTab, closeOthers, closeRight, closeAll, closeSaved) por el historial de bugs `flushSync`.
+2. **Extensiones NodeView**: Usan `ReactNodeViewRenderer` que crea `ReactRenderer` internamente; cambios en el ciclo de vida pueden reintroducir errores `flushSync`.
+3. **SearchReplace**: El plugin de decoraciones ProseMirror manipula el estado del editor directamente; cambios en la limpieza pueden dejar decoraciones huérfanas.
+4. **FileExplorer con drag & drop**: Opera sobre paths de archivo reales; bugs pueden causar pérdida de datos.
+
+---
+
+## Tareas Pendientes (Actualizado 2026-06-22)
+
+### Bugs Confirmados
+- [ ] **Auto-save toggle inoperante**: El checkbox en Settings no controla el `useEffect` de autoguardado en `App.tsx:241`
+- [ ] **markdown-it plugins documentados pero ausentes**: `markdown-it-sub`, `markdown-it-sup`, `markdown-it-footnote`, `markdown-it-mark`, `markdown-it-ins`, `markdown-it-kbd` no están en `package.json` ni se importan en `markdown.ts`
+- [ ] **package.json version desactualizada**: `"0.1.2"` contra v0.3.1 documentado
+
+### Deuda Técnica
+- [ ] **App.tsx monolítico**: Refactorizar en hooks separados (useTabs, useEditorState, useKeyboardShortcuts)
+- [ ] **CSS modularizar**: Migrar a CSS modules o styled-components para evitar colisiones
+- [ ] **`@tiptap/extension-image`**: Dependencia no utilizada, remover
+- [ ] **`switchingTab setTimeout(50ms)`**: Reemplazar por mecanismo más robusto basado en transacciones PM
+- [ ] **SlashCommand `createRoot()` directo**: Migrar a renderizado React controlado
+- [ ] **Persistir workspace folder** en localStorage
+
+### Features Pendientes
+- [ ] Sistema de plugins (extensiones cargables dinámicamente)
+- [ ] Temas comunitarios (importar/exportar JSON)
+- [ ] Buscador de archivos en el explorador lateral
+- [ ] Ctrl+Tab con orden MRU (ya implementado básico)
+- [ ] Sincronización de vista fuente al cambiar de pestaña
+- [ ] Soporte para subíndice/superíndice/notas al pie en markdown-it (documentado pero no implementado)
+
+---
+
+## Bitácora de la Sesión Actual
+
+### 2026-06-22 — Auditoría de Arquitectura y Corrección de Bugs (10:00-12:00)
+
+**Objetivo**: Realizar auditoría completa del código vs documentación para identificar discrepancias, bugs y deuda técnica.
+
+**Actividades realizadas**:
+1. Lectura completa de todos los archivos fuente (33 archivos):
+   - `src/main/index.ts` (184 líneas)
+   - `src/preload/index.ts` (27 líneas)
+   - `src/renderer/src/App.tsx` (677 líneas)
+   - 13 componentes en `components/`
+   - 11 extensiones en `extensions/`
+   - 5 utilidades en `utils/`
+   - Archivos de configuración: `package.json`, `electron.vite.config.ts`, `electron-builder.yml`
+2. Lectura de `README.md` (199 líneas) y `documents/DOCUMENTACION.md` (757 líneas)
+3. Comparación sistemática documentación vs implementación → 9 diferencias identificadas
+4. Identificación de 3 bugs confirmados y 6 items de deuda técnica
+
+**Problemas encontrados**:
+1. **Auto-save toggle inoperante**: El checkbox "Auto-guardado cada 30s" en Settings no está conectado al `useEffect` que ejecuta el guardado periódico.
+2. **6 dependencias markdown-it documentadas pero inexistentes**: Ni en package.json ni en código.
+3. **package.json version = "0.1.2"** vs v0.3.1 documentado.
+4. **Ctrl+Tab ya implementado** en código (navegación circular) pero listado como pendiente en README Roadmap.
+5. **`@tiptap/extension-image` innecesaria** como dependencia.
+6. **`lang="en"`** en HTML para app 100% en español.
+7. **Workspace folder sin persistencia** entre sesiones.
+8. **SearchReplace ya limpia decoraciones** al desmontar (problema conocido resuelto).
+
+**Próximas tareas recomendadas**:
+- Corregir auto-save toggle en App.tsx y Settings.tsx
+- Remover `@tiptap/extension-image` de package.json
+- Actualizar package.json version
+- Actualizar README Roadmap
+- Agregar dependencias markdown-it faltantes si se requieren
+- Refactorizar App.tsx en hooks separados
 
 ---
 
@@ -755,3 +860,161 @@ Electron Main Process (src/main/index.ts)
 3. Sistema de plugins (extensiones cargables dinámicamente)
 4. Ctrl+Tab con orden MRU
 5. Buscador de archivos en el explorador lateral
+
+### 2026-06-22 — Simplificación de Interfaz (14:00-15:00)
+
+**Objetivo**: Reducir elementos visuales eliminando los menús Insertar y Herramientas de la barra superior, moviendo sus opciones a Archivo y Ver.
+
+**Cambios realizados**:
+1. **MenuBar.tsx**:
+   - Eliminado menú `Insertar` (8 items: Tabla, Imagen, Video, Enlace, Bloque de Código, Mermaid, Fórmula, Cita)
+   - Eliminado menú `Herramientas` (2 items: Configuración, Estadísticas)
+   - Movido "Configuración" a menú `Archivo` (antes de "Salir")
+   - Movido "Estadísticas" a menú `Ver` (después de "Mostrar/Ocultar Índice")
+   - Eliminadas 8 props `onInsert*` de `MenuBarProps`
+
+2. **App.tsx**:
+   - Eliminados 7 props `onInsert*` del JSX `<MenuBar>`
+
+3. **README.md**:
+   - ASCII art actualizado: `[Archivo] [Editar] [Ver] [Ayuda]`
+
+4. **DOCUMENTACION.md**:
+   - Actualizadas referencias a menús en layout, componentes y descripciones
+
+**Impacto**: Ninguna funcionalidad se pierde. Todos los comandos de inserción siguen accesibles desde Toolbar, Paleta de Comandos (Ctrl+Shift+P) y SlashCommand (/). Configuración y Estadísticas se movieron a menús existentes.
+
+**Archivos modificados**:
+- `src/renderer/src/components/MenuBar.tsx`
+- `src/renderer/src/App.tsx`
+- `README.md`
+- `documents/DOCUMENTACION.md`
+
+### 2026-06-22 — Simplificación de Toolbar (15:00-16:30)
+
+**Objetivo**: Reemplazar la barra de herramientas con iconos de lucide-react por una versión minimalista con etiquetas de texto, eliminando botones avanzados y manteniendo solo operaciones básicas de Markdown.
+
+**Cambios realizados**:
+1. **Toolbar.tsx**:
+   - Interface `ToolbarProps` reducida de 15 props a 5: `editor`, `onNew`, `onOpen`, `onOpenFolder`, `onSave`, `onCommandPalette`
+   - Eliminado import completo de `lucide-react` (25 iconos)
+   - Reemplazados todos los iconos por etiquetas de texto: `+ Nuevo`, `Abrir`, `Carpeta`, `Guardar`, `Deshacer`, `Rehacer`, `H1`/`H2`/`H3`, `B`, `I`, `Lista`, `Tareas`, `Cita`, `Código`, `Mentor`
+   - Eliminados botones: tema, focus mode, vista fuente, settings, explorer, underline, strikethrough, table, image, link, math, video
+
+2. **App.tsx**:
+   - Toolbar JSX simplificado a 6 props
+   - Eliminados callbacks huérfanos: `insertImage`, `insertLink`, `insertMathBlock`, `insertMermaid`, `insertQuote`, `insertVideo`, `cycleTheme`, `handleInsertTable`, `handleTableSizeSelect`
+   - Eliminados estados huérfanos: `tablePickerPos`, `lastTableSize`
+   - Eliminado JSX de `<TableSizePicker>`
+   - Eliminados imports huérfanos: `TableSizePicker`, `showPrompt`
+
+**Impacto**: La barra de herramientas es más simple y didáctica. Las acciones avanzadas siguen accesibles desde Paleta de Comandos (Ctrl+Shift+P), SlashCommand (/), barra de menú, y atajos de teclado. El paquete `lucide-react` queda como dependencia no utilizada (pendiente de remover).
+
+**Archivos modificados**:
+- `src/renderer/src/components/Toolbar.tsx`
+- `src/renderer/src/App.tsx`
+- `documents/DOCUMENTACION.md`
+
+### 2026-06-22 — Sistema de Hints Educativos (16:30-18:00)
+
+**Objetivo**: Implementar un sistema educativo contextual que enseñe la sintaxis Markdown al usar los botones de formato por primera vez.
+
+**Filosofía**: "Los botones son una ayuda permanente, pero Marknote debe enseñar Markdown hasta que el usuario cada vez necesite menos los botones y termine dominando Markdown de forma natural."
+
+**Cambios realizados**:
+
+1. **`src/renderer/src/utils/markdownHints.ts`** (CREADO):
+   - Interfaz `MarkdownHint` con `id`, `title`, `markdown`, `example`, `explanation`
+   - Tipo `HintType`: `'toolbar' | 'mentor' | 'contextual' | 'onboarding'`
+   - Interfaz `ActiveHint` con `id`, `type`, `data`, `anchorRect`
+   - 9 hints para: H1, H2, H3, Bold, Italic, BulletList, TaskList, Blockquote, CodeBlock
+   - Helpers `markdownHintSeen(id)` y `markdownHintMarkSeen(id)` para localStorage
+
+2. **`src/renderer/src/components/MarkdownHintCard.tsx`** (CREADO):
+   - Popover posicionado (`position: fixed`) anclado al botón clickeado vía `DOMRect`
+   - Diseño de tarjeta educativa: icono 💡, título, sintaxis Markdown, ejemplo, explicación, botón "Lo aprendí ✓"
+   - Click fuera → cierra sin marcar como visto
+   - Click "Lo aprendí ✓" → `localStorage.setItem('marknote-hint-<id>', 'true')` + cierra
+   - Corrección de posición si el card se sale de la ventana
+   - Sin dependencias externas
+
+3. **`src/renderer/src/components/Toolbar.tsx`** (MODIFICADO):
+   - Nuevo estado `activeHint: ActiveHint | null`
+   - Nueva función `handleFormatClick` que ejecuta el comando inmediatamente y programa la aparición del hint tras 150ms
+   - Timer con cleanup en unmount
+   - Los 9 botones de formato ahora usan `handleFormatClick` en lugar de inline `editor.chain()`
+   - Botones de archivo, undo/redo y mentor no afectados
+
+4. **`src/renderer/src/App.css`** (MODIFICADO):
+   - ~90 líneas nuevas de estilos para `.markdown-hint-card` y subcomponentes
+   - Flecha CSS `::before` apuntando al botón
+   - Diseño limpio con esquinas redondeadas, sombra suave, tipografía mono para sintaxis
+
+**Persistencia**: 9 claves en localStorage: `marknote-hint-h1`, `marknote-hint-h2`, `marknote-hint-bold`, etc. Valores: `'true'`. Sin fechas, contadores ni metadatos.
+
+**Preparado para futuro**:
+- Tipos `HintType` permiten hints desde mentor, contextual u onboarding sin refactor
+- Todas las claves siguen patrón `marknote-hint-*`, fácil de limpiar para restablecer ayudas
+
+**Archivos creados**:
+- `src/renderer/src/utils/markdownHints.ts`
+- `src/renderer/src/components/MarkdownHintCard.tsx`
+
+**Archivos modificados**:
+- `src/renderer/src/components/Toolbar.tsx`
+- `src/renderer/src/App.css`
+- `documents/DOCUMENTACION.md`
+
+**Sin cambios**:
+- `App.tsx` — Toolbar props no cambiaron
+- `MenuBar.tsx`, `CommandPalette.tsx` — no tocados
+- `package.json` — sin nuevas dependencias
+
+### 2026-06-22 — Mentor Markdown (18:00-19:30)
+
+**Objetivo**: Crear las bases del Mentor Markdown, un sistema educativo offline que enseña la sintaxis Markdown desde la aplicación.
+
+**Arquitectura seleccionada**: Archivos TypeScript (Opción A). Descartada SQLite (Opción B) por ser sobreingeniería — los datos son estáticos, no hay consultas relacionales, y se evita una dependencia nativa.
+
+**Cambios realizados**:
+
+1. **`src/renderer/src/knowledge/index.ts`** (CREADO):
+   - Interfaz `KnowledgeTopic` con `id`, `title`, `category`, `summary`, `syntax[]`, `details`, `example`, `tips[]`, `related[]`
+   - Tipo `TopicCategory`: `'basico' | 'intermedio' | 'avanzado'`
+   - 12 temas educativos completos en español: headings, bold-italic, lists, checklists, blockquotes, code-blocks, tables, images, links, mermaid, math, videos
+   - Cada tema incluye sintaxis, explicación, ejemplo, tips y temas relacionados
+   - Cero dependencias externas, completamente offline
+
+2. **`src/renderer/src/components/MentorModal.tsx`** (CREADO):
+   - Modal overlay con sidebar de temas agrupados por categoría (📘 Básico, 📗 Intermedio, 📕 Avanzado)
+   - Panel de contenido con: sintaxis (chips de código), explicación, ejemplo, tips y temas relacionados navegables
+   - Escape para cerrar, click fuera cierra
+   - Diseño limpio de 720×520px con scroll interno
+
+3. **`src/renderer/src/App.tsx`** (MODIFICADO):
+   - Agregado `showMentor` state y renderizado de `<MentorModal>`
+   - Nuevo prop `onMentor` para Toolbar
+
+4. **`src/renderer/src/components/Toolbar.tsx`** (MODIFICADO):
+   - Cambiado prop `onCommandPalette` → `onMentor` en el botón Mentor
+   - Mentor ahora abre directamente el modal educativo
+   - CommandPalette sigue accesible por Ctrl+Shift+P
+
+5. **`src/renderer/src/App.css`** (MODIFICADO):
+   - ~170 líneas de estilos para mentor modal y componentes internos
+
+**Impacto**: El botón Mentor ahora abre un explorador completo de sintaxis Markdown. CommandPalette sigue disponible por atajo de teclado. Sistema preparado para futuras expansiones (búsqueda, práctica interactiva, onboarding).
+
+**Archivos creados**:
+- `src/renderer/src/knowledge/index.ts`
+- `src/renderer/src/components/MentorModal.tsx`
+
+**Archivos modificados**:
+- `src/renderer/src/App.tsx`
+- `src/renderer/src/components/Toolbar.tsx`
+- `src/renderer/src/App.css`
+- `documents/DOCUMENTACION.md`
+
+**Sin cambios**:
+- `MenuBar.tsx`, `CommandPalette.tsx`, `MarkdownHintCard.tsx`
+- `package.json` — sin nuevas dependencias
