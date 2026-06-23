@@ -619,6 +619,16 @@ Solo si ambos pasan sin errores se considera terminado.
 - **Síntoma**: El menú contextual del explorador se desbordaba horizontalmente.
 - **Fix**: Agregar `max-width: 50vw` al menú contextual.
 
+### Checkbox en Listas de Tareas Desalineado Verticalmente
+- **Síntoma**: El checkbox se ubicaba en la parte inferior de la línea de texto, pegado a la base, en lugar de centrado verticalmente con el texto.
+- **Causa raíz**: El `<label>` dentro de los task items contiene un `<input>` + `<span>` vacío (checkboxStyler). Con el `<label>` en inline por defecto, el `<span>` vacío establecía un baseline en la parte inferior, y el `<input>` (con `vertical-align: baseline`) se alineaba contra ese baseline, apareciendo pegado al fondo.
+- **Fix (3 intentos)**:
+  1. Cambiar `margin-top: 0.3em` → `0.15em` en el `<label>` — insuficiente, el checkbox seguía abajo por el baseline del `<span>`
+  2. Agregar `display: flex; align-items: center; margin-top: 0` al `<label>` — el checkbox se centró dentro del label, pero ahora quedaba arriba del texto por no considerar el `line-height: 1.8`
+  3. Ajustar `margin-top: 0.5em` para alinear el centro del checkbox con el centro de la primera línea de texto en `line-height: 1.8` y `font-size: 16px`
+- **Estado**: ✅ Resuelto
+- **Archivo modificado**: `src/renderer/src/App.css` — línea 1249
+
 ---
 
 ## Problemas Conocidos
@@ -1252,3 +1262,37 @@ Regex nuevo:
 - `src/renderer/src/components/MarkdownHintCard.tsx`
 
 **Comportamiento verificado**: El toggle vista Markdown ↔ WYSIWYG preserva correctamente los checklists en ambos sentidos, sin pérdida de formato.
+
+### 2026-06-23 — Checkbox Alignment Fix (12:30-13:15)
+
+**Problema**: El checkbox en listas de tareas (taskList) se mostraba desalineado verticalmente respecto al texto. Tras varios intentos de corrección con `margin-top` y `vertical-align`, el checkbox seguía en la parte inferior (baseline del `<span>` vacío dentro del `<label>`).
+
+**Investigación**:
+- El NodeView de `@tiptap/extension-task-item` genera: `<label><input><span></span></label>` — el `<span>` vacío (checkboxStyler) establece un baseline en la parte inferior del label
+- Con `vertical-align: baseline` (default), el `<input>` se alinea contra ese baseline, quedando pegado al fondo
+- `vertical-align: middle` no funciona de forma fiable contra el baseline dominante del `<span>` vacío
+
+**Solución aplicada (3 iteraciones)**:
+
+1. **Intento 1**: `margin-top: 0.3em → 0.15em` — el checkbox seguía abajo (baseline issue, no de margin)
+2. **Intento 2**: `display: flex; align-items: center; margin-top: 0` — el checkbox se centró dentro del label (el flex ignora el `<span>` vacío), pero ahora quedaba arriba del texto
+3. **Intento 3 (final)**: `display: flex; align-items: center; margin-top: 0.5em` — centra el checkbox dentro del label y lo posiciona a la altura correcta para alinear su centro con el centro de la primera línea de texto
+
+**Cálculo de `margin-top`**:
+- `font-size: 16px`, `line-height: 1.8` → línea = 28.8px
+- Checkbox ~13-16px → centro a ~8px del tope del label
+- Centro del texto: 28.8 / 2 = 14.4px
+- `margin-top` necesario = 14.4px - 8px = 6.4px ≈ **0.4-0.5em**
+
+**CSS final**:
+```css
+.ProseMirror ul[data-type='taskList'] li > label {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  margin-top: 0.5em;
+}
+```
+
+**Archivo modificado**:
+- `src/renderer/src/App.css` — línea 1249
