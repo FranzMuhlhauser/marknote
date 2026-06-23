@@ -36,8 +36,7 @@ export function StatusBar({ editor, modified }: StatusBarProps) {
 
   return (
     <footer className="statusbar">
-      <span className="statusbar-item">WYSIWYG</span>
-      <span className="statusbar-sep">|</span>
+
       <span className="statusbar-item">UTF-8</span>
       <span className="statusbar-sep">|</span>
       <span className="statusbar-item">Línea {cursor.line}</span>

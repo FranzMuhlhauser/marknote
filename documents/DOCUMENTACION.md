@@ -1018,3 +1018,237 @@ Electron Main Process (src/main/index.ts)
 **Sin cambios**:
 - `MenuBar.tsx`, `CommandPalette.tsx`, `MarkdownHintCard.tsx`
 - `package.json` — sin nuevas dependencias
+
+### 2026-06-23 — Mejora de Contraste en Tema Oscuro (10:00-10:15)
+
+**Problema detectado**: En el tema oscuro, la separación visual entre el menú superior, barra de herramientas, explorador, editor y panel de índice era casi imperceptible debido al bajo contraste de los bordes y colores de fondo.
+
+**Causa raíz**: La variable `--border: #3d3d3d` (RGB 61,61,61) proporcionaba muy poco contraste contra los fondos oscuros del tema (`--toolbar-bg: #2d2d2d`, delta 16; `--sidebar-bg: #252526`, delta 24; `--bg: #1e1e1e`, delta 31). El peor caso era el borde inferior del toolbar contra su propio fondo, con solo 16 puntos RGB de diferencia.
+
+**Cambios realizados**:
+- Modificado `--border` de `#3d3d3d` a `#555555` en el bloque `[data-theme='dark']` de `App.css`
+
+**Contraste resultante**:
+| Fondo | Delta antes | Delta después | Mejora |
+|---|---|---|---|
+| `--toolbar-bg` (#2d2d2d) | 16 | 40 | 2.5× |
+| `--sidebar-bg` / `--titlebar-bg` (#252526) | 24 | 48 | 2× |
+| `--bg` (#1e1e1e) | 30 | 55 | 1.8× |
+
+**Archivos modificados**:
+- `src/renderer/src/App.css` — línea 30
+
+**Observaciones relevantes**:
+- Ningún otro tema fue modificado (light, nord, dracula, solarized, github permanecen intactos)
+- Ninguna regla de layout, componente o archivo adicional fue tocado
+- El valor `#555555` sigue siendo un gris oscuro y minimalista, coherente con la estética del tema
+- Todas las separaciones estructurales mejoraron simultáneamente (menú↔toolbar, toolbar↔tabbar, sidebar↔editor, etc.) al compartir todas la variable `--border`
+
+### 2026-06-23 — Corrección de Toggle de Tema en Toolbar (10:15-10:30)
+
+**Bug detectado**: Al cambiar del tema oscuro al tema claro usando el botón ☀️/🌙 del toolbar, el usuario debía hacer 2 o más clics para que el cambio se aplicara. Desde el menú Ver o el panel Settings funcionaba correctamente con 1 clic.
+
+**Análisis**:
+- La función `toggleTheme` en `App.tsx:375` implementaba un ciclo de 3 estados: `light → dark → system → light`
+- El estado `'system'` no es una apariencia visual sino una preferencia que resuelve a `'light'` o `'dark'` según el SO
+- Al partir de `'dark'`, el primer clic iba a `'system'`: si el SO estaba en modo oscuro, la apariencia no cambiaba; si estaba en modo claro, cambiaba a claro pero el estado quedaba como `'system'`, requiriendo un segundo clic para llegar a `'light'`
+
+**Solución aplicada**:
+- Modificado `toggleTheme` para que sea un toggle binario `light ↔ dark`, eliminando `'system'` del ciclo
+- `'system'` ahora se trata como apariencia clara (cae al `else`), llevando a `'dark'` en 1 clic
+- El estado `'system'` sigue siendo seleccionable desde el menú Ver (`Tema Claro`/`Tema Oscuro`) y desde Settings
+
+**Archivos modificados**:
+- `src/renderer/src/App.tsx` — líneas 375-380 (función `toggleTheme`)
+
+**Posibles mejoras futuras**:
+- Agregar un indicador visual en el botón del toolbar cuando el tema activo es `'system'` (ej. icono 🌗)
+- Considerar un menú desplegable en el toolbar con las 3 opciones (Claro, Oscuro, Sistema) en lugar de un solo botón toggle
+
+### 2026-06-23 — Diferenciación de Iconos Código / Vista Fuente (10:30-10:40)
+
+**Decisión de diseño**: Cambiar el icono del botón "Bloque de Código" de `</>` a `{}` para diferenciarlo visualmente del botón "Ver Markdown" (`<>`).
+
+**Razones**:
+- Los iconos `</>` (bloque de código) y `<>` (vista fuente) eran visualmente casi idénticos — ambos usan ángulos brackets, diferenciándose solo por una barra `/`
+- La confusión se agravaba porque ambos conceptos están relacionados con "código/formato"
+- `{}` es el símbolo universal de código en editores e IDEs (VS Code, GitHub, IntelliJ)
+- `<>` se mantiene para vista fuente porque representa HTML/markup, semánticamente apropiado
+
+**Cambios realizados**:
+- `src/renderer/src/components/Toolbar.tsx` — línea 190: cambiado `</>` por `{}` en el botón de bloque de código
+
+**Archivos afectados**:
+- `src/renderer/src/components/Toolbar.tsx`
+- `documents/DOCUMENTACION.md`
+
+### 2026-06-23 — Checklist: Sintaxis `- [ ]` No Funciona en WYSIWYG (10:45-11:00)
+
+**Bug detectado**: La sintaxis Markdown estándar de checklists `- [ ]` y `- [x]` no se convertía en checklists interactivas al escribir en el editor WYSIWYG. El Mentor enseñaba `- [ ]` pero el usuario tenía que usar `[ ]` (sin dash) para que Tiptap la reconociera.
+
+**Investigación**:
+1. El Mentor (`knowledge/index.ts`) enseña correctamente `- [ ] Tarea pendiente`
+2. El preprocesador (`markdown.ts`) acepta `- [ ]` para importación desde source view
+3. El turndown (`markdown.ts`) exporta `- [ ]` desde HTML
+4. **El `inputRegex` de `@tiptap/extension-task-item`** solo acepta `[ ]` (bare) — no contempla el list marker `- ` o `* `
+
+**Causa raíz**:
+El input rule original en `node_modules/@tiptap/extension-task-item/dist/index.cjs:10`:
+```js
+const inputRegex = /^\s*(\[([( |x])?\])\s$/;
+```
+Este regex requiere `[ ]` al inicio de línea. No acepta el list marker `- ` estándar de Markdown. Adicionalmente, `[( |x)]` es un character class mal formado que coincide con paréntesis y pipe como caracteres literales.
+
+**Solución aplicada**:
+Extender `TaskItem` en `extensions/index.ts` con un input rule personalizado que acepta el list marker opcional `- ` o `* ` antes de `[ ]`.
+
+Regex nuevo:
+```
+/^\s*(?:[-*]\s+)?\[(x| ?)\]\s$/
+```
+
+**Compatibilidad**: El nuevo regex acepta todos los formatos previos (`[ ]`, `[x]`) más los nuevos (`- [ ]`, `- [x]`, `* [ ]`, `* [x]`).
+
+**Archivos modificados**:
+- `src/renderer/src/extensions/index.ts` — líneas 8, 43-55
+
+**Decisión**: Se mantiene la sintaxis Markdown estándar `- [ ]` y `- [x]` como la enseñada por el Mentor y como la que funciona en el editor.
+
+**Observaciones futuras**:
+- El input rule original de `@tiptap/extension-task-item` tiene un bug en su character class `[( |x)]` que coincide con caracteres no esperados `(`, `|`, `)`. La extensión personalizada corrige esto usando `(x| ?)` que solo acepta `x` o espacio.
+
+### 2026-06-23 — Consistencia Ctrl+B / Botón Explorador (11:00-11:15)
+
+**Problema detectado**: Ctrl+B mostraba u ocultaba el explorador (toggle), pero el botón ✕ dentro del explorador solo permitía cerrarlo (`setShowExplorer(false)`). Una vez cerrado el explorador, no existía ningún elemento UI para reabrirlo sin usar el atajo de teclado.
+
+**Causa raíz**:
+- Ctrl+B usaba `setShowExplorer(s => !s)` (toggle)
+- El botón ✕ usaba `setShowExplorer(false)` (asignación fija)
+- No había ningún botón en el toolbar ni menú para mostrar/ocultar el explorador
+
+**Cambios realizados**:
+
+1. **`src/renderer/src/App.tsx` — línea 810**:
+   - ✕ handler cambiado de `setShowExplorer(false)` a `setShowExplorer(s => !s)`
+   - Misma lógica que Ctrl+B; al estar dentro del explorador, el toggle solo se activa cuando está visible (cierra)
+
+2. **`src/renderer/src/components/Toolbar.tsx`**:
+   - Agregado prop `onToggleExplorer` a `ToolbarProps`
+   - Nuevo botón `🗂` con título "Explorador (Ctrl+B)" en el grupo Vista (antes del botón `<>`)
+   - Usa la misma lógica `setShowExplorer(s => !s)` que Ctrl+B
+
+3. **`src/renderer/src/App.tsx` — línea 782**:
+   - Pasado `onToggleExplorer={() => setShowExplorer(s => !s)}` al `<Toolbar>`
+
+**Archivos modificados**:
+- `src/renderer/src/App.tsx`
+- `src/renderer/src/components/Toolbar.tsx`
+- `documents/DOCUMENTACION.md`
+
+**Observaciones de UX**:
+- El botón `🗂` está en el grupo Vista del toolbar (`<>` `🎯` `☀️`), cerca de otros comandos de visualización
+- El título del botón incluye el atajo `(Ctrl+B)` para reforzar el descubrimiento del atajo de teclado
+- El ✕ dentro del explorador usa ahora la misma función de toggle (aunque en la práctica siempre cierra por estar dentro del panel)
+- El estado `showExplorer` sigue siendo la única fuente de verdad — no se crearon nuevos estados
+
+### 2026-06-23 — Sistema Educativo de Botones Markdown (11:15-11:30)
+
+**Problema detectado**: Los botones Markdown (H1, H2, H3, Negrita, Cursiva, Lista, Checklist, Cita, Código) mostraban tooltips tradicionales con atajos de teclado (ej. `title="Negrita (Ctrl+B)"`). Estos tooltips nativos aparecían inmediatamente al hacer hover, compitiendo con el sistema educativo `MarkdownHintCard` que requiere 2 segundos de hover. El usuario nunca llegaba a descubrir la tarjeta educativa.
+
+**Causa raíz**: Dos sistemas de ayuda superpuestos: `title` nativo (inmediato, sin valor educativo) y `MarkdownHintCard` (2s de delay, enseña sintaxis real). El `title` ganaba por inmediatez.
+
+**Cambios realizados**:
+
+1. **`src/renderer/src/components/Toolbar.tsx`**:
+   - Eliminado `markdownHintSeen` del import — los hints ahora se muestran en cada hover
+   - Eliminado el check `if (markdownHintSeen(id) || ...)` en `handleMouseEnter` — el hint ya no depende de primera visita
+   - Eliminados los `title` de los 9 botones Markdown: H1, H2, H3, Bold, Italic, bulletList, taskList, blockquote, codeBlock
+   - Los botones de acción (📄 📂 📁 💾 ↶ ↷ 🗂 `<>` 🎯 ☀️/🌙 🤖) conservan sus `title`
+
+2. **`src/renderer/src/components/MarkdownHintCard.tsx`**:
+   - Eliminado import de `markdownHintMarkSeen`
+   - Eliminada función `handleLearned`
+   - Eliminado botón "Lo aprendí ✓"
+   - La tarjeta ahora solo muestra: 💡 título → Markdown → Ejemplo → Explicación, sin interacción requerida
+
+**Comportamiento resultante**:
+- Mouse sobre botón Markdown → 2 segundos → aparece tarjeta educativa
+- Mouse sale del botón → 2 segundos → tarjeta se oculta automáticamente
+- Sin modales, sin captura de foco, sin interrupción de escritura
+- Los timers se cancelan mutuamente en movimientos rápidos (no hay tarjetas fantasma)
+
+**Filosofía aplicada**: "Los botones son una ayuda permanente, no una dependencia." El usuario descubre la sintaxis Markdown de forma progresiva y no intrusiva, cada vez que necesita recordarla.
+
+**Archivos modificados**:
+- `src/renderer/src/components/Toolbar.tsx`
+- `src/renderer/src/components/MarkdownHintCard.tsx`
+- `documents/DOCUMENTACION.md`
+
+**Archivos no modificados**:
+- `src/renderer/src/utils/markdownHints.ts` — datos y funciones `markdownHintSeen`/`markdownHintMarkSeen` conservados para uso futuro (onboarding, estadísticas, Mentor interactivo)
+- `src/renderer/src/App.tsx`
+- `src/renderer/src/App.css`
+
+**Tareas futuras relacionadas**:
+- Reintroducir persistencia (`markdownHintMarkSeen`) si se desea que el usuario pueda marcar hints como aprendidos y simplificar la UI
+- Extender el sistema a hints contextuales (tipo `contextual`) u onboarding (tipo `onboarding`) usando el mismo MarkdownHintCard
+
+### 2026-06-23 — Debugging y Fix de Hints Educativos (11:30-12:00)
+
+**Problema**: Tras la refactorización del sistema de hints (tarjetas en hover con 2s de delay), las tarjetas educativas no aparecían al hacer hover sobre los botones Markdown. El código parecía correcto pero no se veía ningún hint en pantalla.
+
+**Investigación**:
+1. Se revisó que los 9 botones Markdown tuvieran `onMouseEnter={handleMouseEnter(id, e)}` correctamente asignados — sí estaban
+2. Se verificaron los timers: `enterTimer` se iniciaba en `handleMouseEnter` y `leaveTimer` en `handleMouseLeave` — correcto
+3. Se agregaron `console.log` de depuración en 5 puntos: `handleMouseEnter`, `handleMouseLeave`, antes del `setTimeout`, dentro del timer al setear `hintState`, y en la renderización condicional del `<MarkdownHintCard>`
+4. Se verificó que `getBoundingClientRect()` se capturaba dentro de `setTimeout`, lo que podía causar que `e.currentTarget` quedara obsoleto si React reciclaba el evento sintético o si el DOM se modificaba entre la captura y la ejecución del timer
+
+**Causa raíz**: `e.currentTarget.getBoundingClientRect()` se ejecutaba dentro del `setTimeout(800)` del `enterTimer`. Aunque React 19 eliminó el event pooling, `currentTarget` puede volverse `null` si el elemento se desmonta del DOM entre el momento del evento y la ejecución del callback. En la práctica, el problema era que el rectángulo se capturaba tarde, y el `MarkdownHintCard` se renderizaba con un `DOMRect` inválido o nulo, resultando invisible.
+
+**Solución**:
+1. **`src/renderer/src/components/Toolbar.tsx`**:
+   - Agregado `hintRect = useRef<DOMRect | null>(null)` para capturar el rectángulo inmediatamente
+   - `handleMouseEnter` ahora captura `hintRect.current = e.currentTarget.getBoundingClientRect()` antes de cualquier timer
+   - El `setTimeout` del `enterTimer` usa `hintRect.current` en lugar de `e.currentTarget.getBoundingClientRect()`
+   - El `setHintState` ahora pasa `hintRect.current` como `anchorRect`
+   - Se eliminó un `handleMouseLeave` duplicado que estaba causando conflictos
+
+**Archivos modificados**:
+- `src/renderer/src/components/Toolbar.tsx`
+
+**Archivos no modificados**:
+- `src/renderer/src/components/MarkdownHintCard.tsx`
+- `src/renderer/src/utils/markdownHints.ts`
+
+**Comportamiento verificado** (por el usuario): Las tarjetas educativas aparecen correctamente tras 2s de hover sobre cualquier botón Markdown, y se ocultan 2s después de que el mouse sale del botón.
+
+### 2026-06-23 — Fix Checklists al Alternar Vista Markdown (12:00-12:30)
+
+**Problema**: Al cambiar de vista Markdown a vista de edición (WYSIWYG), los checklists perdían su formato y se convertían en listas normales. La sintaxis `- [ ] texto` se transformaba en `• texto` después del toggle.
+
+**Evidencia del bug**:
+1. Vista edición inicial: checklists correctos (checkboxes visibles)
+2. Vista Markdown: sintaxis correcta `- [ ] texto`
+3. Al volver a vista edición: se convertía en lista normal `• texto`
+4. Vista Markdown final: sintaxis incorrecta `* texto` (perdió el `[ ]`)
+
+**Causa raíz**: `preprocessTaskLists()` en `markdown.ts` generaba `<li data-checked="true/false">` pero **sin el atributo `data-type="taskItem"`**. La regla `parseHTML` de `@tiptap/extension-task-item` busca `li[data-type="taskItem"]` (con prioridad 51), no `li[data-checked]`. Al no matchear, ProseMirror caía al `ListItem` genérico (`tag: 'li'`, prioridad 50), creando `listItem` dentro de `taskList`. Como el esquema de `taskList` solo acepta `taskItem+`, el parser reinterpretaba el `<ul>` como `bulletList`, perdiendo los checkboxes.
+
+**Fix**: Se agregó `data-type="taskItem"` al `<li>` generado en `preprocessTaskLists`, haciendo que el parse rule de TaskItem matchee correctamente.
+
+**Cambio (1 línea)**:
+```diff
+- return `<li data-checked="${checked}"><label>...
++ return `<li data-type="taskItem" data-checked="${checked}"><label>...
+```
+
+**Archivo modificado**:
+- `src/renderer/src/utils/markdown.ts` — línea 49
+
+**Archivos no modificados**:
+- `src/renderer/src/extensions/index.ts`
+- `src/renderer/src/App.tsx`
+- `src/renderer/src/components/Toolbar.tsx`
+- `src/renderer/src/components/MarkdownHintCard.tsx`
+
+**Comportamiento verificado**: El toggle vista Markdown ↔ WYSIWYG preserva correctamente los checklists en ambos sentidos, sin pérdida de formato.

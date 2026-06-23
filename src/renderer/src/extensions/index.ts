@@ -5,6 +5,7 @@ import Link from '@tiptap/extension-link'
 import Typography from '@tiptap/extension-typography'
 import TaskList from '@tiptap/extension-task-list'
 import TaskItem from '@tiptap/extension-task-item'
+import { wrappingInputRule } from '@tiptap/core'
 import Table from '@tiptap/extension-table'
 import TableRow from '@tiptap/extension-table-row'
 import TableCell from '@tiptap/extension-table-cell'
@@ -39,7 +40,19 @@ export function getExtensions() {
     Link.configure({ openOnClick: false, HTMLAttributes: { class: 'editor-link' } }),
     Typography,
     TaskList,
-    TaskItem.configure({ nested: true }),
+    TaskItem.extend({
+      addInputRules() {
+        return [
+          wrappingInputRule({
+            find: /^\s*(?:[-*]\s+)?\[(x| ?)\]\s$/,
+            type: this.type,
+            getAttributes: match => ({
+              checked: match[match.length - 1] === 'x',
+            }),
+          }),
+        ]
+      }
+    }).configure({ nested: true }),
     Table.configure({ resizable: false }),
     TableRow,
     TableCell,

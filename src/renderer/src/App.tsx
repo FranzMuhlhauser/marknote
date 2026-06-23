@@ -17,7 +17,7 @@ import { TableContextMenu } from './components/TableContextMenu'
 import { ConfirmDialog } from './components/ConfirmDialog'
 import { mdToHtml, htmlToMd } from './utils/markdown'
 import { exportHtml, exportPdf } from './utils/export'
-import { loadTheme, saveTheme, type ThemeId } from './utils/themes'
+import { loadTheme, saveTheme, getSystemTheme, resolveTheme, type ThemeId } from './utils/themes'
 import 'katex/dist/katex.min.css'
 import './App.css'
 
@@ -129,7 +129,8 @@ function App() {
   }, [])
 
   useEffect(() => {
-    document.documentElement.setAttribute('data-theme', theme)
+    const effective = resolveTheme(theme)
+    document.documentElement.setAttribute('data-theme', effective)
     saveTheme(theme)
   }, [theme])
 
@@ -370,6 +371,26 @@ function App() {
       setShowSource(false)
     }
   }, [editor, showSource, getMarkdown, sourceText])
+
+  const toggleTheme = useCallback(() => {
+    setTheme(prev => {
+      if (prev === 'dark') return 'light'
+      return 'dark'
+    })
+  }, [])
+
+  // Listen for system theme changes
+  useEffect(() => {
+    const mq = window.matchMedia('(prefers-color-scheme: dark)')
+    const handler = () => {
+      if (theme === 'system') {
+        const resolved = getSystemTheme()
+        document.documentElement.setAttribute('data-theme', resolved)
+      }
+    }
+    mq.addEventListener('change', handler)
+    return () => mq.removeEventListener('change', handler)
+  }, [theme])
 
   const handleReorderTab = useCallback((dragId: string, targetId: string, position: 'before' | 'after') => {
     setTabs(prev => {
@@ -683,6 +704,9 @@ function App() {
         }
         return
       }
+      if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === 'M') {
+        e.preventDefault(); toggleSource(); return
+      }
       if ((e.ctrlKey || e.metaKey) && e.key === 'b') {
         // Only toggle sidebar if not focused in the editor (let editor handle bold)
         const pm = document.querySelector('.ProseMirror')
@@ -691,7 +715,7 @@ function App() {
         }
       }
       if (e.key === 'F11') {
-        e.preventDefault(); window.api.toggleFullscreen(); return
+        e.preventDefault(); setFocusMode(f => !f); return
       }
       if (e.key === 'Escape') {
         if (showSource) { toggleSource(); return }
@@ -751,6 +775,13 @@ function App() {
         onOpen={openDoc}
         onOpenFolder={openFolder}
         onMentor={() => setShowMentor(true)}
+        onToggleSource={toggleSource}
+        onToggleFocus={() => setFocusMode(f => !f)}
+        onToggleTheme={toggleTheme}
+        onToggleExplorer={() => setShowExplorer(s => !s)}
+        showSource={showSource}
+        focusMode={focusMode}
+        theme={theme}
       />
 
       <TabBar
@@ -768,7 +799,8 @@ function App() {
       {showSearch && <SearchReplace editor={editor} onClose={() => setShowSearch(false)} />}
 
       <div className="main-content">
-        <aside className={`sidebar sidebar-left ${focusMode ? 'dimmed' : ''} ${!showExplorer ? 'collapsed' : ''}`}>
+        {!focusMode && (
+        <aside className={`sidebar sidebar-left ${!showExplorer ? 'collapsed' : ''}`}>
           <FileExplorer
             folder={workspaceFolder}
             currentFile={activeTab?.filePath ?? null}
@@ -776,9 +808,10 @@ function App() {
             onOpenFolder={openFolder}
             onOpenFileFromDisk={openDoc}
             onNewDoc={newDoc}
-            onClose={() => setShowExplorer(false)}
+            onClose={() => setShowExplorer(s => !s)}
           />
         </aside>
+        )}
 
         <main className="editor-container">
           {showWelcome && tabs.length === 0 ? (
@@ -813,14 +846,14 @@ function App() {
           )}
         </main>
 
-        {showOutline && (
-          <aside className={`sidebar sidebar-right ${focusMode ? 'dimmed' : ''}`}>
+        {!focusMode && showOutline && (
+          <aside className="sidebar sidebar-right">
             <Outline editor={editor} />
           </aside>
         )}
 
-        {showStats && (
-          <aside className={`sidebar sidebar-right sidebar-stats ${focusMode ? 'dimmed' : ''}`}>
+        {!focusMode && showStats && (
+          <aside className="sidebar sidebar-right sidebar-stats">
             <Stats editor={editor} />
           </aside>
         )}

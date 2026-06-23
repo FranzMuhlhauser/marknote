@@ -1,4 +1,4 @@
-export type ThemeId = 'light' | 'dark' | 'nord' | 'dracula' | 'solarized' | 'github' | 'custom'
+export type ThemeId = 'light' | 'dark' | 'system' | 'nord' | 'dracula' | 'solarized' | 'github' | 'custom'
 
 export interface CustomTheme {
   name: string
@@ -12,6 +12,7 @@ export interface CustomTheme {
 export const THEMES: { id: ThemeId; label: string }[] = [
   { id: 'light', label: 'Claro' },
   { id: 'dark', label: 'Oscuro' },
+  { id: 'system', label: 'Sistema' },
   { id: 'nord', label: 'Nord' },
   { id: 'dracula', label: 'Dracula' },
   { id: 'solarized', label: 'Solarized' },
@@ -22,6 +23,16 @@ export function loadTheme(): ThemeId {
   const saved = localStorage.getItem('marknote-theme')
   if (saved && (THEMES.some(t => t.id === saved) || saved === 'custom')) return saved as ThemeId
   return 'light'
+}
+
+export function getSystemTheme(): 'light' | 'dark' {
+  if (typeof window === 'undefined') return 'light'
+  return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
+}
+
+export function resolveTheme(theme: ThemeId): 'light' | 'dark' | 'nord' | 'dracula' | 'solarized' | 'github' | 'custom' {
+  if (theme === 'system') return getSystemTheme()
+  return theme
 }
 
 export function saveTheme(theme: ThemeId): void {

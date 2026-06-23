@@ -46,7 +46,7 @@ function preprocessTaskLists(source: string): string {
         if (!m) return ''
         const checked = m[1] === 'x'
         const html = md.renderInline(m[2])
-        return `<li data-checked="${checked}"><label><input type="checkbox"${checked ? ' checked' : ''}></label><div><p>${html}</p></div></li>`
+        return `<li data-type="taskItem" data-checked="${checked}"><label><input type="checkbox"${checked ? ' checked' : ''}></label><div><p>${html}</p></div></li>`
       })
       return '\n<ul data-type="taskList">\n' + items.join('\n') + '\n</ul>\n'
     }

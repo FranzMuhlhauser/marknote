@@ -1,6 +1,5 @@
 import { useEffect, useRef } from 'react'
 import type { MarkdownHint } from '../utils/markdownHints'
-import { markdownHintMarkSeen } from '../utils/markdownHints'
 
 interface MarkdownHintCardProps {
   hint: MarkdownHint
@@ -20,11 +19,6 @@ export function MarkdownHintCard({ hint, anchorRect, onClose }: MarkdownHintCard
     document.addEventListener('mousedown', handleClick, true)
     return () => document.removeEventListener('mousedown', handleClick, true)
   }, [onClose])
-
-  function handleLearned() {
-    markdownHintMarkSeen(hint.id)
-    onClose()
-  }
 
   let top = anchorRect.bottom + 8
   let left = anchorRect.left
@@ -56,9 +50,6 @@ export function MarkdownHintCard({ hint, anchorRect, onClose }: MarkdownHintCard
         </div>
         <p className="markdown-hint-explanation">{hint.explanation}</p>
       </div>
-      <button className="markdown-hint-btn" onClick={handleLearned}>
-        Lo aprendí ✓
-      </button>
     </div>
   )
 }
