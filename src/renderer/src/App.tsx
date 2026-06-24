@@ -13,9 +13,11 @@ import { StatusBar } from './components/StatusBar'
 import { TabBar, getTabTitle, type TabInfo } from './components/TabBar'
 import { WelcomeScreen } from './components/WelcomeScreen'
 import { Settings } from './components/Settings'
+import { OnboardingModal } from './components/OnboardingModal'
 import { TableContextMenu } from './components/TableContextMenu'
 import { ConfirmDialog } from './components/ConfirmDialog'
 import { mdToHtml, htmlToMd } from './utils/markdown'
+import { getCustomWords, addCustomWord } from './utils/customDictionary'
 import { exportHtml, exportPdf } from './utils/export'
 import { loadTheme, saveTheme, getSystemTheme, resolveTheme, type ThemeId } from './utils/themes'
 import 'katex/dist/katex.min.css'
@@ -36,6 +38,23 @@ function createTab(content = '', filePath: string | null = null): TabDoc {
 function addRecent(path: string) {
   const recent = JSON.parse(localStorage.getItem('marknote-recent') || '[]') as string[]
   localStorage.setItem('marknote-recent', JSON.stringify([path, ...recent.filter(f => f !== path)].slice(0, 10)))
+}
+
+function expandToWord(doc: any, pos: number): { from: number; to: number } | null {
+  const from = Math.max(0, pos - 200)
+  const to = Math.min(doc.content.size, pos + 200)
+  const text = doc.textBetween(from, to)
+  const relPos = pos - from
+
+  const before = text.slice(0, relPos)
+  const after = text.slice(relPos)
+
+  const wordStartRel = before.match(/[\p{L}\p{M}0-9']*$/u)?.[0].length ?? 0
+  const wordEndRel = after.match(/^[\p{L}\p{M}0-9']*/u)?.[0].length ?? 0
+
+  if (wordStartRel === 0 && wordEndRel === 0) return null
+
+  return { from: pos - wordStartRel, to: pos + wordEndRel }
 }
 
 let forceClose = false
@@ -65,6 +84,7 @@ function App() {
   const [showSettings, setShowSettings] = useState(false)
   const [showMentor, setShowMentor] = useState(false)
   const [showWelcome, setShowWelcome] = useState(true)
+  const [showOnboarding, setShowOnboarding] = useState(() => localStorage.getItem('marknote-onboarding-shown') !== 'true')
   const [tableMenuPos, setTableMenuPos] = useState<{ x: number; y: number } | null>(null)
   const [pendingConfirm, setPendingConfirm] = useState<PendingConfirm | null>(null)
   const sourceRef = useRef<HTMLTextAreaElement>(null)
@@ -83,6 +103,10 @@ function App() {
       ))
     },
     editorProps: {
+      attributes: {
+        spellcheck: 'true',
+        lang: 'es'
+      },
       handleDOMEvents: {
         contextMenu: (view, event) => {
           // Check if right-clicked inside a table
@@ -142,6 +166,36 @@ function App() {
   useEffect(() => {
     localStorage.setItem('marknote-show-explorer', String(showExplorer))
   }, [showExplorer])
+
+  useEffect(() => {
+    const words = getCustomWords()
+    if (words.length > 0) {
+      window.api.addCustomWords(words)
+    }
+  }, [])
+
+  useEffect(() => {
+    window.api.onSpellcheckReplaceWord((replacement) => {
+      if (!editor) return
+      const { from, to } = editor.state.selection
+      if (from !== to) {
+        editor.chain().focus().deleteSelection().insertContent(replacement).run()
+        return
+      }
+      const range = expandToWord(editor.state.doc, from)
+      if (!range) return
+      editor
+        .chain()
+        .focus()
+        .setTextSelection(range)
+        .deleteSelection()
+        .insertContent(replacement)
+        .run()
+    })
+    window.api.onSpellcheckAddWord((word) => {
+      addCustomWord(word)
+    })
+  }, [])
 
   useEffect(() => {
     window.api.onUpdateStatus((status, payload) => {
@@ -347,6 +401,14 @@ function App() {
   openFileFromExplorerRef.current = openFileFromExplorer
 
   useEffect(() => {
+    const handleStartup = async () => {
+      const startupFile = await window.api.getStartupFile()
+      if (startupFile) {
+        openFileFromExplorerRef.current(startupFile)
+      }
+    }
+
+    handleStartup()
     window.api.onOpenFile((filePath) => {
       openFileFromExplorerRef.current(filePath)
     })
@@ -764,6 +826,7 @@ function App() {
         onSettings={() => setShowSettings(true)}
         onStats={() => setShowStats(s => !s)}
         onCommandPalette={() => setShowPalette(true)}
+        onShowOnboarding={() => setShowOnboarding(true)}
         focusMode={focusMode}
         showOutline={showOutline}
       />
@@ -875,6 +938,7 @@ function App() {
         />
       )}
       {showMentor && <MentorModal onClose={() => setShowMentor(false)} />}
+      {showOnboarding && <OnboardingModal onClose={() => setShowOnboarding(false)} />}
       {showSettings && (
         <Settings
           theme={theme}

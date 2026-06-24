@@ -1,5 +1,6 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { THEMES, type ThemeId, type CustomTheme } from '../utils/themes'
+import { getCustomWords, addCustomWord, removeCustomWord } from '../utils/customDictionary'
 
 interface SettingsProps {
   theme: ThemeId
@@ -10,6 +11,28 @@ interface SettingsProps {
 }
 
 export function Settings({ theme, fontSize, onThemeChange, onFontSizeChange, onClose }: SettingsProps) {
+  const [customWords, setCustomWords] = useState<string[]>(() => getCustomWords())
+  const [newWord, setNewWord] = useState('')
+
+  useEffect(() => {
+    setCustomWords(getCustomWords())
+  }, [])
+
+  const handleAddWord = async () => {
+    const word = newWord.trim()
+    if (!word) return
+    const updated = addCustomWord(word)
+    setCustomWords(updated)
+    setNewWord('')
+    await window.api.addCustomWord(word)
+  }
+
+  const handleRemoveWord = async (word: string) => {
+    const updated = removeCustomWord(word)
+    setCustomWords(updated)
+    await window.api.removeCustomWord(word)
+  }
+
   const [showCustomTheme, setShowCustomTheme] = useState(false)
   const [customTheme, setCustomTheme] = useState<CustomTheme>(() => {
     const saved = localStorage.getItem('marknote-custom-theme')
@@ -143,6 +166,31 @@ export function Settings({ theme, fontSize, onThemeChange, onFontSizeChange, onC
               onChange={e => onFontSizeChange(Number(e.target.value))}
               className="settings-range"
             />
+          </section>
+
+          <section className="settings-section">
+            <h3>Corrección ortográfica</h3>
+            <p className="settings-desc">Palabras que no se marcarán como error ortográfico.</p>
+            <div className="dictionary-add">
+              <input
+                className="settings-input dictionary-input"
+                placeholder="Ej: Marknote"
+                value={newWord}
+                onChange={e => setNewWord(e.target.value)}
+                onKeyDown={e => { if (e.key === 'Enter') handleAddWord() }}
+              />
+              <button className="settings-action-btn primary" onClick={handleAddWord} disabled={!newWord.trim()}>Agregar</button>
+            </div>
+            {customWords.length > 0 && (
+              <div className="dictionary-list">
+                {customWords.map(word => (
+                  <div key={word} className="dictionary-word">
+                    <span>{word}</span>
+                    <button className="dictionary-remove" onClick={() => handleRemoveWord(word)}>✕</button>
+                  </div>
+                ))}
+              </div>
+            )}
           </section>
 
           <section className="settings-section">

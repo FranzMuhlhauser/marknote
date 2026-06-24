@@ -74,7 +74,8 @@ marknote/
 │           │   ├── StatusBar.tsx      # Barra de estado inferior
 │           │   ├── Settings.tsx       # Panel de configuración (temas, plugins, atajos)
 │           │   ├── WelcomeScreen.tsx  # Pantalla de bienvenida
-│           │   └── TableContextMenu.tsx # Menú contextual para tablas
+│           │   ├── OnboardingModal.tsx # Guía interactiva de 7 pasos (primera ejecución)
+│           │   ├── TableContextMenu.tsx # Menú contextual para tablas
 │           └── utils/
 │               ├── markdown.ts     # Conversión MD ↔ HTML (markdown-it + Turndown)
 │               ├── export.ts       # Exportación HTML y PDF
@@ -145,6 +146,19 @@ La aplicación sigue un diseño de **3 columnas**:
 - **Menú contextual en pestañas**: clic derecho permite Cerrar, Cerrar otros, Cerrar a la derecha, Cerrar todos, Cerrar guardados
 - **Barra de estado** inferior con: modo fijo "WYSIWYG" (se eliminó el toggle showSource), UTF-8, línea, "Columna" (nombre completo, no abreviado), palabras, tiempo de lectura, estado de guardado
 - **Pantalla de bienvenida** con título "📝 Bienvenido a Marknote", botones Crear Documento / Abrir Documento, cuadrícula de atajos de teclado (Ctrl+N/O/S/Shift+P/F/F11) y archivos recientes
+
+### Guía de Onboarding
+- Modal interactivo de 7 pasos que se muestra automáticamente en la primera ejecución
+- Se oculta con localStorage (`marknote-onboarding-shown`) para no mostrar nuevamente
+- Componente `OnboardingModal.tsx` con:
+  - 7 pasos educativos: Bienvenida, Editor WYSIWYG, Barra de herramientas, Explorador, Paleta de comandos, Atajos útiles, Inicio
+  - Navegación entre pasos con botones Anterior/Siguiente
+  - Indicadores visuales de progreso (dots interactivos)
+  - Botón Cerrar (✕) para saltar la guía
+- Accesible permanentemente desde menú **Ayuda > Ver guía nuevamente**
+- Diseño minimalista sin highlights de elementos
+- Sin dependencias externas adicionales
+- Almacenamiento persistente en `localStorage` bajo clave `marknote-onboarding-shown`
 
 ### Editor
 - Edición WYSIWYG con TipTap (StarterKit, Underline, Link, Typography, Highlight, TextAlign)
@@ -313,6 +327,9 @@ La aplicación sigue un diseño de **3 columnas**:
 | `update:install` | Reinicia e instala la actualización descargada |
 | `window:toggleFullscreen` | Alterna pantalla completa |
 | `app:quit` | Cierra la aplicación |
+| `spellcheck:addWord` | Agrega una palabra al diccionario personalizado del spell checker |
+| `spellcheck:removeWord` | Elimina una palabra del diccionario personalizado |
+| `spellcheck:addWords` | Agrega múltiples palabras en lote (usado al iniciar) |
 
 ### Eventos Main → Renderer
 
@@ -320,6 +337,8 @@ La aplicación sigue un diseño de **3 columnas**:
 |---|---|
 | `update:status` | Envía estado de la actualización (`checking`, `available`, `not-available`, `downloading`, `downloaded`, `error`) |
 | `file:open` | Envía ruta de archivo .md para abrir (desde segunda instancia, línea de comandos o archivo asociado) |
+| `spellcheck:replace-word` | Envía sugerencia seleccionada desde el menú contextual de ortografía; el renderer reemplaza la palabra en el editor |
+| `spellcheck:add-word` | Envía palabra a agregar al diccionario personalizado vía menú contextual |
 
 ---
 
@@ -405,6 +424,9 @@ Para crear un nuevo Release:
 | v0.1.1 | 2026-06-18 | Nuevo doc en blanco, fix open file |
 | v0.1.0 | 2026-06-18 | Versión inicial: editor WYSIWYG, tablas, KaTeX, Mermaid, export, file explorer, source view |
 | v0.3.1 | 2026-06-19 | Corrección flushSync (closeTab, closeOthers, closeRight, closeSaved), Table resize desactivado (`resizable: false`), Table header sort removido, SlashCommand y VideoBlock agregados, TableSizePicker, BoldItalic, TableSort, single instance lock, file association, markdown-it plugins extendidos, DEFAULT_MD template, docs actualizadas |
+| v0.3.4 | 2026-06-24 | Menú contextual de corrección ortográfica con sugerencias Hunspell, "Agregar al diccionario" e "Ignorar palabra" vía Menu nativo de Electron + IPC, expandToWord helper para reemplazo en ProseMirror |
+| v0.3.3 | 2026-06-24 | Diccionario personalizado de corrección ortográfica (localStorage + Electron spellchecker API), UI en Configuración, registro automático al iniciar, customDictionary.ts, estilos CSS para diccionario |
+| v0.3.2 | 2026-06-24 | Guía de Onboarding interactiva (7 pasos), localStorage persistencia, menú Ayuda > Ver guía nuevamente, OnboardingModal.tsx, estilos minimalistas, decisiones arquitectónicas documentadas |
 
 ---
 
@@ -544,9 +566,40 @@ Solo si ambos pasan sin errores se considera terminado.
 
 ### File Association / Single Instance
 - `app.requestSingleInstanceLock()` para evitar múltiples instancias
-- Segunda instancia envía evento `file:open` a la instancia existente
-- Soporte para `open-file` (macOS) y argumento de línea de comandos (`.md` file)
-- Renderer escucha `onOpenFile` desde preload para abrir archivo al recibir el evento
+- Se conserva la ruta de archivo de inicio en el main antes de abrir la ventana
+- `app.on('open-file')` y argumento de línea de comandos `.md` ahora se manejan mediante `dispatchOpenFile()` para enviar el evento al renderer con seguridad
+- Se expone `app:getStartupFile` al renderer para abrir el archivo inicial después de montar la aplicación
+- Segunda instancia envía evento `file:open` a la instancia existente y reutiliza la misma lógica de apertura
+- Renderer escucha `onOpenFile` desde preload y abre el documento recibido usando `openFileFromExplorer`
+
+### Bug detectado
+- El archivo `.md` recibido en el arranque no se entregaba de forma confiable al renderer en la primera instancia, lo que provocaba un documento vacío en lugar de cargar el archivo.
+
+### Causa raíz
+- `process.argv` se evaluaba en el main, pero la coordinación con la ventana principal y el `did-finish-load` no era robusta.
+- El path inicial podía perderse antes de que el renderer estuviera listo para procesar `file:open`.
+
+### Solución aplicada
+- Añadido almacenamiento temporal `startupFilePath` en `src/main/index.ts`.
+- Unificado el envío de archivos entrantes en `dispatchOpenFile()`.
+- Expuesto `getStartupFile` desde `src/preload/index.ts` y tipado en `src/renderer/src/env.d.ts`.
+- Inicializado el archivo de arranque en `src/renderer/src/App.tsx` con la misma función de apertura existente.
+
+### Archivos modificados
+- `src/main/index.ts`
+- `src/preload/index.ts`
+- `src/renderer/src/env.d.ts`
+- `src/renderer/src/App.tsx`
+
+### Pruebas realizadas
+- Escenario 1: aplicación cerrada + doble clic en `.md` → se abre el archivo automáticamente.
+- Escenario 2: aplicación ya abierta + doble clic en otro `.md` → la app recibe la nueva ruta y abre el documento.
+- Escenario 3: abrir la aplicación desde accesoso directo → se crea un documento vacío normal.
+
+### Comportamiento esperado
+- Asociaciones `.md` en Windows abren el archivo correcto en Marknote.
+- Si la aplicación ya está abierta, un nuevo archivo `.md` envía el path a la instancia existente.
+- Abrir la aplicación sin archivo usa la experiencia de documento vacío estándar.
 
 ### Markdown Source Editor
 - Vista fuente implementada con `<textarea>` sincronizado al estado del tab
@@ -561,6 +614,26 @@ Solo si ambos pasan sin errores se considera terminado.
 
 ### lucide-react Icons
 - La Toolbar usa `lucide-react` para iconografía (FileText, Bold, Italic, etc.)
+
+### Diccionario Personalizado de Corrección Ortográfica
+- Permite al usuario agregar palabras personalizadas que no se marcan como error ortográfico
+- Input en Configuración > Corrección ortográfica con campo de texto + botón "Agregar"
+- Lista de palabras agregadas con botón ✕ para eliminar cada una
+- Persistencia en `localStorage` bajo clave `marknote-custom-dictionary`
+- Al iniciar la app, todas las palabras se registran en el spell checker nativo de Electron vía IPC
+- Usa `session.addWordToSpellCheckerDictionary()` y `session.removeWordFromSpellCheckerDictionary()` de Electron
+- Sin dependencias externas
+
+### Menú Contextual de Corrección Ortográfica
+- Al hacer clic derecho sobre una palabra mal escrita (subrayada en rojo), se muestra un menú contextual nativo con:
+  - **Sugerencias de corrección** (hasta 5, generadas por Hunspell vía Chromium)
+  - **Agregar al diccionario** — guarda la palabra en localStorage y la registra en el spell checker
+  - **Ignorar palabra** — registra la palabra en el spell checker para la sesión actual
+- Implementado con el `Menu` nativo de Electron (`Menu.buildFromTemplate` + `menu.popup`)
+- Sin componentes React, sin CSS, sin dependencias externas
+- El menú se posiciona automáticamente cerca del cursor, se cierra con Escape y al hacer clic fuera (comportamiento nativo del SO)
+- La selección de una sugerencia reemplaza la palabra en el editor mediante IPC + ProseMirror
+- La detección de palabra mal escrita usa el evento `webContents.on('context-menu')` que provee `params.misspelledWord` y `params.dictionarySuggestions`
 
 ---
 
@@ -582,6 +655,180 @@ Solo si ambos pasan sin errores se considera terminado.
 - **`:focus-visible`** global con `outline: 2px solid var(--accent)`
 - **Scrollbars estilizadas** en `.tabbar`, `.command-list`, `.settings-body`
 - **`prefers-reduced-motion`** respetado en animaciones
+
+---
+
+## Decisiones Arquitectónicas del Onboarding
+
+### Componente `OnboardingModal.tsx`
+- **Ruta**: `src/renderer/src/components/OnboardingModal.tsx`
+- **Estructura**: 7 pasos educativos organizados en array de objetos `OnboardingStep` con: título, descripción, emoji de icono
+- **Estado**: Gestión simple con `useState(currentStep)` dentro del componente modal
+- **Navegación**: Botones Anterior/Siguiente con lógica de desactivación en primer/último paso
+- **Progreso**: Indicadores visuales (dots) que permiten saltar a cualquier paso al hacer clic
+
+### Persistencia
+- **Mecanismo**: `localStorage` con clave `marknote-onboarding-shown`
+- **Inicialización**: En `App.tsx`, el estado `showOnboarding` se inicializa consultando si el valor está guardado
+- **Guarda**: Al cerrar el modal (botón Cerrar o click en último paso > "Comenzar"), se establece `marknote-onboarding-shown = 'true'`
+- **Reactivación**: Menú **Ayuda > Ver guía nuevamente** limpia el localStorage y muestra el modal
+
+### Integración en App.tsx
+- **Importación**: `import { OnboardingModal } from './components/OnboardingModal'`
+- **Estado**: `const [showOnboarding, setShowOnboarding] = useState(() => localStorage.getItem('marknote-onboarding-shown') !== 'true')`
+- **Renderizado**: Condicional `{showOnboarding && <OnboardingModal onClose={() => setShowOnboarding(false)} />}`
+- **Prop en MenuBar**: `onShowOnboarding={() => setShowOnboarding(true)}`
+
+### Estilos CSS
+- **Overlay**: Fondo oscuro semi-transparente con `position: fixed` y `z-index: 10000`
+- **Modal**: Ancho 500px (max-width 90vw), fondo según tema, bordes y sombra
+- **Contenido**: Flex column centrado, con icono de 48px, título H2, descripción
+- **Indicadores de progreso**: Dots interactivos de 8px, activo con `--accent`, inactivo con `--border`
+- **Botones**: Anterior (secundario, desactivable) y Siguiente/Comenzar (primario)
+- **Responsividad**: Adapta ancho a móvil con `max-width: 90vw`
+
+### Impacto Arquitectónico
+- **Minimalista**: Sin dependencias externas (no usa librerías de tour o highlight)
+- **No-blocking**: El modal es modal pero permite cerrar y continuar usando la app
+- **Reutilizable**: La lógica de localStorage y estado se puede adaptar para otros onboardings
+- **Sostenible**: Basado en patrones React estándar (`useState`, props, renderizado condicional)
+
+### Mejoras Futuras Posibles
+- Opción de "No mostrar nuevamente" directamente en el modal (sin necesidad de localStorage manual)
+- Persisten múltiples pasos vistos (analytics) para entender dónde usuarios abandonan
+- Integración con tutorial interactivo que resalte elementos (tooltips) — requeriría dependencia adicional
+- Localización: soportar múltiples idiomas en los pasos del onboarding
+- Guía contextual: mostrar pasos relevantes según el workflow del usuario
+
+---
+
+## Decisiones Arquitectónicas del Diccionario Personalizado
+
+### Estrategia
+- **Spell checker nativo de Electron**: Se usó `session.addWordToSpellCheckerDictionary()` / `session.removeWordFromSpellCheckerDictionary()` en lugar de implementar un corrector ortográfico personalizado o integrar una librería externa como `hunspell` o `nspell`.
+- **localStorage como almacenamiento**: Se eligió `localStorage` sobre archivos JSON por simplicidad — el diccionario es un array pequeño de strings (< 100 palabras típicamente), no requiere operaciones de archivo ni IPC para lectura/escritura, y es consistente con el patrón usado por otras configuraciones (tema, onboarding, archivos recientes).
+
+### Persistencia (Two-tier)
+| Capa | Propósito | API |
+|---|---|---|
+| `localStorage` (renderer) | Persistencia entre sesiones | `getItem`/`setItem` con clave `marknote-custom-dictionary` |
+| `session.addWordToSpellCheckerDictionary` (main) | Registrar palabras en Chromium/Hunspell | IPC `spellcheck:addWord` / `spellcheck:removeWord` / `spellcheck:addWords` |
+
+En cada inicio de la aplicación, se leen las palabras desde `localStorage` (renderer) y se envían al proceso principal vía IPC para registrarlas en el spell checker nativo.
+
+### Archivos involucrados
+| Archivo | Rol |
+|---|---|
+| `src/renderer/src/utils/customDictionary.ts` | Utilidad de lectura/escritura a `localStorage` (getCustomWords, addCustomWord, removeCustomWord) |
+| `src/main/index.ts` | 3 IPC handlers (`spellcheck:addWord`, `spellcheck:removeWord`, `spellcheck:addWords`) |
+| `src/preload/index.ts` | 3 métodos expuestos al renderer (`addCustomWord`, `removeCustomWord`, `addCustomWords`) |
+| `src/renderer/src/env.d.ts` | Tipos TypeScript para los nuevos métodos en `FileAPI` |
+| `src/renderer/src/components/Settings.tsx` | UI: input + botón Agregar + lista de palabras con botón Eliminar |
+| `src/renderer/src/App.tsx` | Registro automático de palabras personalizadas al montar la aplicación |
+| `src/renderer/src/App.css` | Estilos para `.dictionary-add`, `.dictionary-list`, `.dictionary-word`, `.dictionary-remove`, `.settings-desc` |
+
+### Por qué no archivos JSON
+1. **Complejidad innecesaria**: Leer/escribir un archivo JSON requiere IPC adicional (fs en main process), manejo de errores de archivo, permisos, y carga asíncrona.
+2. **Sin ventajas reales**: El diccionario es datos de configuración de usuario, no datos de documento. `localStorage` ya se usa para propósitos equivalentes (tema personalizado, onboarding).
+3. **Rendimiento**: `localStorage` es síncrono y no requiere esperar a que el proceso principal responda.
+
+### Por qué no una base de datos
+- **Sobredimensionado**: Una base de datos (SQLite, IndexedDB, etc.) para un array de strings no tiene sentido. YAGNI.
+
+### Flujo de datos
+```
+Usuario escribe palabra → Settings.tsx
+  → addCustomWord() → localStorage.setItem()
+  → window.api.addCustomWord(word) → IPC
+    → main process → session.defaultSession.addWordToSpellCheckerDictionary()
+
+App startup → App.tsx useEffect
+  → getCustomWords() → localStorage.getItem()
+  → window.api.addCustomWords(words) → IPC (batch)
+    → main process → session.defaultSession.addWordToSpellCheckerDictionary() x N
+```
+
+### Pruebas realizadas
+1. **Agregar palabra**: Escribir "Marknote" en el input → Enter → aparece en la lista → la palabra deja de marcarse como error ortográfico en el editor
+2. **Eliminar palabra**: Click en ✕ → la palabra desaparece de la lista → se marca nuevamente como error ortográfico
+3. **Persistencia**: Cerrar y reabrir la app → las palabras personalizadas siguen en la lista y no se marcan como error
+4. **Palabra duplicada**: Intentar agregar una palabra ya existente → no se duplica en la lista
+5. **Palabra vacía**: Input vacío o solo espacios → botón Agregar deshabilitado, no se agrega
+6. **Startup**: Al iniciar la app, todas las palabras personalizadas se registran correctamente en el spell checker vía IPC batch
+
+### Comportamiento esperado
+- Las palabras agregadas nunca se marcan como error ortográfico (subrayado rojo)
+- Al eliminar una palabra, vuelve a marcarse como error si no está en el diccionario de Español
+- El diccionario persiste entre sesiones sin intervención del usuario
+- Sin dependencias externas, sin base de datos, sin archivos JSON
+
+---
+
+## Decisiones Arquitectónicas del Menú Contextual de Ortografía
+
+### Estrategia
+- **Menú nativo de Electron** (`Menu.buildFromTemplate` + `menu.popup`) en lugar de un overlay React personalizado.
+- **Causa raíz**: El corrector ortográfico de Chromium/Electron marca palabras mal escritas internamente y solo expone esa información a través del evento `webContents.on('context-menu')` en el proceso principal (`params.misspelledWord`, `params.dictionarySuggestions`). No hay API para consultar desde el renderer si una palabra está mal escrita ni para obtener sugerencias.
+
+### Alternativas consideradas
+| Alternativa | Problema |
+|---|---|
+| Overlay React personalizado | No hay API desde el renderer para detectar si una palabra está mal escrita ni para obtener sugerencias. Habría que pasar por IPC, y aun así manejar posicionamiento, Escape y click-outside manualmente. |
+| `contextmenu` del renderer + IPC | Requiere prevenir el evento `contextmenu` en el DOM, enviar la palabra al main process para verificarla, y no hay API pública para consultar el corrector. |
+| **Menú nativo de Electron** (elegida) | El evento `context-menu` del webContents ya provee `misspelledWord` y `dictionarySuggestions`. `Menu.popup()` maneja posicionamiento, Escape y click-outside automáticamente. Cero código de UI. |
+
+### Flujo de datos
+```
+Usuario → clic derecho en palabra mal escrita
+→ Chromium detecta misspelling y dispara evento en main process
+→ mainWindow.webContents.on('context-menu', (event, params) => {
+    params.misspelledWord, params.dictionarySuggestions
+  })
+→ event.preventDefault() (cancela menú nativo por defecto)
+→ Menu.buildFromTemplate(items) con sugerencias + acciones
+→ menu.popup({ window: mainWindow })
+  → Usuario hace clic en sugerencia:
+    → webContents.send('spellcheck:replace-word', suggestion, word)
+    → Renderer recibe evento en App.tsx
+    → expandToWord(editor.state.doc, cursorPos) encuentra límites de la palabra
+    → editor.chain().setTextSelection(range).deleteSelection().insertContent(replacement).run()
+  → Usuario hace clic en "Agregar al diccionario":
+    → webContents.send('spellcheck:add-word', word) → renderer actualiza localStorage
+    → session.defaultSession.addWordToSpellCheckerDictionary(word)
+  → Usuario hace clic en "Ignorar palabra":
+    → session.defaultSession.addWordToSpellCheckerDictionary(word) (solo sesión actual)
+```
+
+### Archivos involucrados
+| Archivo | Cambio |
+|---|---|
+| `src/main/index.ts` | Nuevo handler `context-menu` en `createWindow()` con `Menu.buildFromTemplate` |
+| `src/preload/index.ts` | 2 nuevos listeners: `onSpellcheckReplaceWord`, `onSpellcheckAddWord` |
+| `src/renderer/src/env.d.ts` | 2 nuevos métodos en `FileAPI` |
+| `src/renderer/src/App.tsx` | useEffect con listeners + función `expandToWord` para reemplazo en ProseMirror |
+
+### Por qué Menu nativo vs overlay React
+1. **Sin UI que construir**: El `Menu` de Electron renderiza menús nativos del SO. No se necesita CSS, componentes React, ni manejo de eventos de teclado.
+2. **Posicionamiento automático**: `menu.popup()` muestra el menú en la posición del cursor del mouse.
+3. **Cierre automático**: Escape y clic fuera del menú son manejados por el SO.
+4. **Cero dependencias**: Todo está en las APIs built-in de Electron.
+
+### Función expandToWord
+- Ubicada en `App.tsx` como función module-level
+- Recibe el documento ProseMirror y una posición (cursor)
+- Busca hacia atrás y adelante usando regex Unicode (`\p{L}\p{M}0-9'`) para detectar límites de palabra
+- Soporta caracteres acentuados del español (á, é, í, ó, ú, ü, ñ)
+- Retorna `{ from, to }` para seleccionar la palabra completa
+
+### Pruebas realizadas
+1. **Sugerencias visibles**: Clic derecho en palabra mal escrita → aparecen sugerencias de corrección
+2. **Reemplazo de palabra**: Clic en una sugerencia → la palabra mal escrita se reemplaza correctamente en el editor
+3. **Agregar al diccionario**: Clic derecho → "Agregar al diccionario" → la palabra deja de marcarse como error
+4. **Ignorar palabra**: Clic derecho → "Ignorar palabra" → la palabra deja de marcarse como error (sesión actual)
+5. **Sin misspelling**: Clic derecho en palabra correcta → no se intercepta el menú, se muestra el menú por defecto del navegador
+6. **Caracteres acentuados**: Palabras con tildes y ñ se expanden correctamente con `expandToWord`
+7. **Escape**: El menú nativo se cierra con Escape (comportamiento del SO)
+8. **Click fuera**: El menú se cierra al hacer clic fuera (comportamiento del SO)
 
 ---
 
@@ -639,6 +886,35 @@ Solo si ambos pasan sin errores se considera terminado.
 - **Autoguardado sobrescribe sin confirmación**: Si el archivo se modificó externamente, el autoguardado lo sobrescribe.
 - **Decoraciones de búsqueda (SearchReplace) no se limpian al cerrar**: Quedan decoraciones en el editor hasta que se abre una nueva búsqueda (no visible para el usuario pero sí en el estado interno de ProseMirror).
 - **TabView (vista fuente) en pestaña nueva**: Al abrir vista fuente y luego cambiar de pestaña, el textarea no se sincroniza correctamente si hubo cambios sin guardar.
+
+---
+
+## Análisis de Funcionalidad Propuesta: Autocompletado de Palabras (2026-06-24)
+
+### Estado
+❌ **Descartado** — no implementado.
+
+### Contexto
+Se evaluó la posibilidad de agregar autocompletado de palabras al editor (sugerencias predictivas mientras se escribe).
+
+### Análisis
+
+| Criterio | Evaluación |
+|---|---|
+| **Aprendizaje de Markdown** | Markdown tiene ~10 reglas de sintaxis. El slash command (`/`) ya cubre la inserción estructural. Autocompletar sintaxis no aporta valor. |
+| **Distracciones** | Cualquier popup predictivo aparece *mientras se escribe*, interrumpiendo el *flow*. Contradice directamente "menos interfaz, más escritura". |
+| **Complejidad técnica** | Requiere: diccionario español completo (~300-500KB), estructura de datos (trie), integración con input de ProseMirror, popup posicionado con navegación por teclado y cierre al hacer clic fuera. Alto costo de implementación. |
+| **Mantenimiento** | El diccionario debe mantenerse actualizado. Edge cases: acentos, palabras compuestas, conjugaciones verbales, nombres propios, mezcla de idiomas. |
+| **Experiencia de escritura** | El autocompletado está diseñado para *código* (nombres largos de variables, APIs). En prosa, la palabra se escribe completa rápidamente; un popup agrega latencia mental sin beneficio real. |
+| **Coherencia con Typora** | Typora no tiene autocompletado de palabras. iA Writer tampoco. Bear tampoco. No es un feature de editores de prosa minimalistas. |
+
+### Decisión
+**No implementar.** El autocompletado de palabras contradice la filosofía central de Marknote, tiene un costo técnico alto y no está presente en editores minimalistas equivalentes.
+
+### Alternativas futuras (si se reconsidera)
+1. **Autocompletado intra-documento** — solo sugiere palabras que ya aparecen en el documento actual. No requiere diccionario externo, es contextual y liviano.
+2. **Autocompletado de emoji shortcodes** — `:smile` → 😊. Mapeo estático, común en editores de texto, no interrumpe la escritura de prosa.
+3. **Extensión del slash command** — agregar más comandos en lugar de crear un sistema nuevo.
 
 ---
 
@@ -1296,3 +1572,76 @@ Regex nuevo:
 
 **Archivo modificado**:
 - `src/renderer/src/App.css` — línea 1249
+
+### 2026-06-24 � Navegaci�n del �ndice
+
+**Descripci�n de la funcionalidad**:
+- Al hacer clic en un �tem del panel lateral "DOCUMENTO" (Outline), el editor ahora realiza un desplazamiento suave (scroll) hacia la posici�n exacta del encabezado correspondiente.
+- Se implement� una animaci�n CSS de resaltado temporal (1.5 segundos) sobre el encabezado destino para proveer feedback visual confirmando la navegaci�n.
+
+**Archivos modificados**:
+- src/renderer/src/components/Outline.tsx: Se actualiz� la funci�n goTo(pos) para obtener el nodo del DOM mediante editor.view.nodeDOM(pos), invocar scrollIntoView nativo e inyectar/retirar la clase CSS de resaltado.
+- src/renderer/src/App.css: Se agregaron los estilos para la clase .heading-highlight con @keyframes de animaci�n para un desvanecimiento suave (highlight-fade).
+
+**Decisiones tomadas**:
+- **Reutilizaci�n del �ndice existente**: No fue necesario reescribir el panel derecho ni crear identificadores paralelos, ya que ProseMirror expone la posici�n absoluta de cada nodo en el documento. Esto permite recuperar el elemento DOM directamente desde la posici�n.
+- **Scroll nativo**: Se us� el m�todo est�ndar Element.scrollIntoView({ behavior: 'smooth' }) sobre el DOM renderizado por ProseMirror por su simplicidad y robustez frente a soluciones propietarias del editor.
+- **Feedback visual m�nimo**: Se opt� por una animaci�n CSS en vez de un estado en React o re-renderizado para mantener un alto rendimiento y evitar l�gica compleja de estado.
+
+**Pruebas realizadas**:
+- **Reutilizacin del ndice existente**: No fue necesario reescribir el panel derecho ni crear identificadores paralelos, ya que ProseMirror expone la posicin absoluta de cada nodo en el documento. Esto permite recuperar el elemento DOM directamente desde la posicin.
+- **Scroll nativo**: Se us el mtodo estndar Element.scrollIntoView({ behavior: 'smooth' }) sobre el DOM renderizado por ProseMirror por su simplicidad y robustez frente a soluciones propietarias del editor.
+- **Feedback visual mnimo**: Se opt por una animacin CSS en vez de un estado en React o re-renderizado para mantener un alto rendimiento y evitar lgica compleja de estado.
+
+**Pruebas realizadas**:
+- Validada la navegacin a encabezados de distintos niveles (H1, H2, H3).
+- Validadas las posiciones en documentos extensos con barras de desplazamiento activas (el scroll suave centra el encabezado en la vista).
+- Validadas anclas con encabezados que tienen texto idntico, ya que la navegacin se basa en posiciones absolutas dentro del documento y no en anclas de texto.
+
+**Observaciones futuras**:
+- Si se agregan vistas de esquema o subsecciones ms complejas, la misma lgica basada en posiciones del documento (pos) debera mantenerse como la manera preferida de indexacin y navegacin dentro de Tiptap/ProseMirror.
+
+### 2026-06-24 — Revisión Ortográfica en Español
+
+**Descripción de la funcionalidad**:
+- El editor WYSIWYG ahora detecta palabras mal escritas en español y las resalta con subrayado rojo ondulado nativo del navegador.
+- Clic derecho sobre una palabra subrayada muestra sugerencias ortográficas en el menú contextual nativo de Chromium.
+- Funciona completamente offline tras la primera descarga del diccionario.
+
+**Evaluación de alternativas**:
+
+| Criterio | A) Spellcheck nativo Chromium/Electron | B) Electron session API | C) typo-js + Hunspell |
+|---|---|---|---|
+| Complejidad | Mínima (solo config) | Misma que A (es la misma API) | Alta (plugin PM + tokenización) |
+| Dependencias | 0 (embebido en Electron) | 0 | +2 (typo-js + .aff/.dic ~5MB) |
+| Mantenimiento | 0 (Chromium actualiza) | 0 | Alto (diccionarios manuales) |
+| Offline | Sí (Hunspell integrado) | Sí | Sí |
+| Integración Tiptap | Nativa (contenteditable) | Nativa | Manual (decoraciones PM) |
+
+**Solución elegida**: **A — Spellcheck nativo de Chromium/Electron**
+
+**Motivos**:
+1. Cero dependencias — ya incluido en Electron 33 (Chromium Hunspell)
+2. Cero código de corrección — el motor maneja tokenización, diccionarios y renderizado del subrayado
+3. Integración perfecta con Tiptap — `contenteditable` soporta `spellcheck` nativamente
+4. Menú contextual con sugerencias gratuito por el motor del navegador
+5. Respeta la filosofía del proyecto: YAGNI, solución más simple, priorizar lo nativo
+
+**Alternativas descartadas**:
+- **B (Electron session API)**: No es una alternativa separada, es la API formal para configurar A. Se usa `session.setSpellCheckerLanguages()`.
+- **C (typo-js + Hunspell)**: Reimplementa lo que Chromium ya hace. Agrega dependencias, código de tokenización, plugin de decoraciones ProseMirror. Viola la regla "No implementar un corrector ortográfico propio".
+
+**Archivos modificados**:
+- `src/main/index.ts`: Agregado `session` al import de Electron, `spellcheck: true` en `webPreferences`, y `session.defaultSession.setSpellCheckerLanguages(['es'])` después de crear la ventana.
+- `src/renderer/src/App.tsx`: Agregado `attributes: { spellcheck: 'true', lang: 'es' }` en `editorProps` del `useEditor()` para que el `div[contenteditable]` de Tiptap tenga el atributo `spellcheck`.
+
+**Pruebas realizadas**:
+- `npx tsc --noEmit` — sin errores de tipos
+- `npm run build` — compilación exitosa (14.07s)
+- Verificación de que `spellcheck: true` se propaga al DOM del editor
+- El `<textarea>` de vista fuente mantiene `spellCheck={false}` (correcto, es código Markdown raw)
+
+**Observaciones futuras**:
+- Si se desea soportar múltiples idiomas, se puede extender `setSpellCheckerLanguages(['es', 'en'])` en el main process
+- El menú contextual de sugerencias es el nativo de Chromium; si se desea uno personalizado, se necesitaría `webContents.on('context-menu')` en el main process
+- La corrección no aplica en bloques de código ni en fórmulas matemáticas (comportamiento correcto, ya que esos NodeViews tienen `contentEditable={false}`)

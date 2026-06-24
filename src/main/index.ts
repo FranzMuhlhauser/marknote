@@ -1,12 +1,25 @@
-import { app, BrowserWindow, ipcMain, dialog, shell, Menu } from 'electron'
+import { app, BrowserWindow, ipcMain, dialog, shell, Menu, session } from 'electron'
 import { join, dirname, basename, extname } from 'path'
 import { readFile, writeFile, readdir, mkdir, rename, copyFile, unlink } from 'fs/promises'
 import { autoUpdater } from 'electron-updater'
 
 let mainWindow: BrowserWindow | null = null
+let startupFilePath: string | null = null
 
 function send(channel: string, ...args: any[]) {
   mainWindow?.webContents.send(channel, ...args)
+}
+
+function dispatchOpenFile(filePath: string) {
+  startupFilePath = filePath
+  if (!mainWindow) return
+
+  const sendFile = () => send('file:open', filePath)
+  if (mainWindow.webContents.isLoadingMainFrame()) {
+    mainWindow.webContents.once('did-finish-load', sendFile)
+  } else {
+    sendFile()
+  }
 }
 
 function createWindow(): void {
@@ -19,13 +32,54 @@ function createWindow(): void {
     icon: join(__dirname, '../../resources/icon.png'),
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
-      sandbox: false
+      sandbox: false,
+      spellcheck: true
     }
   })
 
   mainWindow.webContents.on('console-message', (_event, level, message) => {
     const tag = ['verbose', 'info', 'warn', 'error'][level] || 'log'
     console.log(`[renderer:${tag}] ${message}`)
+  })
+
+  session.defaultSession.setSpellCheckerLanguages(['es'])
+
+  mainWindow.webContents.on('context-menu', (event, params) => {
+    if (!params.misspelledWord) return
+    event.preventDefault()
+
+    const items: Electron.MenuItemConstructorOptions[] = []
+
+    for (const suggestion of params.dictionarySuggestions.slice(0, 5)) {
+      items.push({
+        label: suggestion,
+        click: () => {
+          mainWindow?.webContents.send('spellcheck:replace-word', suggestion, params.misspelledWord)
+        }
+      })
+    }
+
+    if (params.dictionarySuggestions.length > 0) {
+      items.push({ type: 'separator' })
+    }
+
+    items.push({
+      label: 'Agregar al diccionario',
+      click: () => {
+        mainWindow?.webContents.send('spellcheck:add-word', params.misspelledWord)
+        session.defaultSession.addWordToSpellCheckerDictionary(params.misspelledWord)
+      }
+    })
+
+    items.push({
+      label: 'Ignorar palabra',
+      click: () => {
+        session.defaultSession.addWordToSpellCheckerDictionary(params.misspelledWord)
+      }
+    })
+
+    const menu = Menu.buildFromTemplate(items)
+    menu.popup({ window: mainWindow })
   })
 
   if (process.env.ELECTRON_RENDERER_URL) {
@@ -143,16 +197,36 @@ ipcMain.handle('app:quit', () => {
   app.quit()
 })
 
+ipcMain.handle('app:getStartupFile', () => {
+  const filePath = startupFilePath
+  startupFilePath = null
+  return filePath
+})
+
+ipcMain.handle('spellcheck:addWord', (_event, word: string) => {
+  session.defaultSession.addWordToSpellCheckerDictionary(word)
+})
+
+ipcMain.handle('spellcheck:removeWord', (_event, word: string) => {
+  session.defaultSession.removeWordFromSpellCheckerDictionary(word)
+})
+
+ipcMain.handle('spellcheck:addWords', (_event, words: string[]) => {
+  for (const word of words) {
+    session.defaultSession.addWordToSpellCheckerDictionary(word)
+  }
+})
+
 const gotLock = app.requestSingleInstanceLock()
 if (!gotLock) {
-  console.warn('Another instance is running, forwarding arguments...')
+  app.quit()
 } else {
   app.on('second-instance', (_event, argv) => {
     const mdFile = argv.find(a => /\.md$/i.test(a))
     if (mdFile && mainWindow) {
       if (mainWindow.isMinimized()) mainWindow.restore()
       mainWindow.focus()
-      send('file:open', mdFile)
+      dispatchOpenFile(mdFile)
     }
   })
 }
@@ -162,10 +236,8 @@ app.whenReady().then(() => {
   createWindow()
 
   const pendingFile = process.argv.find(a => /\.md$/i.test(a))
-  if (pendingFile && mainWindow) {
-    mainWindow.webContents.on('did-finish-load', () => {
-      send('file:open', pendingFile)
-    })
+  if (pendingFile) {
+    dispatchOpenFile(pendingFile)
   }
 
   try { autoUpdater.checkForUpdates() } catch { /* silent */ }
@@ -180,5 +252,5 @@ app.on('activate', () => {
 })
 
 app.on('open-file', (_event, filePath) => {
-  send('file:open', filePath)
+  dispatchOpenFile(filePath)
 })

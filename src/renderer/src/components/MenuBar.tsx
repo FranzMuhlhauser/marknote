@@ -33,6 +33,7 @@ interface MenuBarProps {
   onSettings: () => void
   onStats: () => void
   onCommandPalette: () => void
+  onShowOnboarding: () => void
   focusMode: boolean
   showOutline: boolean
 }
@@ -104,7 +105,9 @@ export function MenuBar(props: MenuBarProps) {
   ]
 
   const ayuda: MenuAction[] = [
-    { label: 'Paleta de Comandos', shortcut: 'Ctrl+Shift+P', action: props.onCommandPalette }
+    { label: 'Paleta de Comandos', shortcut: 'Ctrl+Shift+P', action: props.onCommandPalette },
+    { separator: true, label: '' },
+    { label: 'Ver guía nuevamente', action: props.onShowOnboarding }
   ]
 
   return (

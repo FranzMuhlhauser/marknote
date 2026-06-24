@@ -17,6 +17,12 @@ interface FileAPI {
   duplicate: (filePath: string) => Promise<string>
   deleteFile: (filePath: string) => Promise<void>
   moveFile: (oldPath: string, newPath: string) => Promise<void>
+  getStartupFile: () => Promise<string | null>
+  addCustomWord: (word: string) => Promise<void>
+  removeCustomWord: (word: string) => Promise<void>
+  addCustomWords: (words: string[]) => Promise<void>
+  onSpellcheckReplaceWord: (callback: (replacement: string, word: string) => void) => void
+  onSpellcheckAddWord: (callback: (word: string) => void) => void
 }
 
 declare global {

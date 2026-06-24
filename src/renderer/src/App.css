@@ -909,9 +909,19 @@ body {
 }
 .outline-tip {
   font-size: 11px;
-  color: var(--placeholder);
+  color: var(--text-muted);
+  margin: 0;
   line-height: 1.4;
-  opacity: 0.8;
+}
+
+@keyframes highlight-fade {
+  0% { background-color: var(--accent); }
+  100% { background-color: transparent; }
+}
+
+.heading-highlight {
+  animation: highlight-fade 1.5s ease-out forwards;
+  border-radius: 4px;
 }
 
 /* Mentor Modal */
@@ -1116,6 +1126,138 @@ body {
   font-family: inherit;
 }
 .mentor-related-btn:hover { background: var(--accent); color: #fff; border-color: var(--accent); }
+
+/* Onboarding Modal */
+.onboarding-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10000;
+}
+
+.onboarding-modal {
+  width: 500px;
+  max-width: 90vw;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.2);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.onboarding-header {
+  display: flex;
+  justify-content: flex-end;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.onboarding-close {
+  background: none;
+  border: none;
+  color: var(--placeholder);
+  font-size: 18px;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.onboarding-close:hover { background: var(--hover); color: var(--text); }
+
+.onboarding-content {
+  padding: 40px 32px;
+  text-align: center;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 16px;
+}
+
+.onboarding-icon {
+  font-size: 48px;
+}
+
+.onboarding-title {
+  font-size: 20px;
+  font-weight: 600;
+  margin: 0;
+  color: var(--text);
+}
+
+.onboarding-description {
+  font-size: 14px;
+  color: var(--placeholder);
+  line-height: 1.6;
+  margin: 0;
+}
+
+.onboarding-progress {
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+  padding: 20px 32px;
+}
+
+.onboarding-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--border);
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+.onboarding-dot:hover { background: var(--placeholder); }
+.onboarding-dot.active {
+  background: var(--accent);
+}
+
+.onboarding-actions {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 16px 32px;
+  border-top: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.onboarding-btn {
+  padding: 8px 16px;
+  font-size: 13px;
+  font-weight: 500;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  cursor: pointer;
+  font-family: inherit;
+  transition: all 0.2s;
+  flex: 1;
+}
+
+.onboarding-btn.primary {
+  background: var(--accent);
+  color: #fff;
+  border-color: var(--accent);
+}
+.onboarding-btn.primary:hover { opacity: 0.9; }
+.onboarding-btn.primary:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.onboarding-btn.secondary {
+  background: var(--hover);
+  color: var(--text);
+}
+.onboarding-btn.secondary:hover:not(:disabled) { background: var(--border); }
+.onboarding-btn.secondary:disabled { opacity: 0.5; cursor: not-allowed; }
 
 /* Stats */
 .stats-panel { padding: 12px; }
@@ -2017,6 +2159,55 @@ body {
 .plugin-status.active {
   background: var(--success-bg);
   color: var(--success-text);
+}
+
+/* Custom Dictionary */
+.settings-desc {
+  font-size: 12px;
+  color: var(--placeholder);
+  margin-bottom: 8px;
+}
+
+.dictionary-add {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.dictionary-input {
+  flex: 1;
+}
+
+.dictionary-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 10px;
+}
+
+.dictionary-word {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px;
+  font-size: 12px;
+  background: var(--hover);
+  border-radius: 4px;
+  color: var(--text);
+}
+
+.dictionary-remove {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--placeholder);
+  font-size: 12px;
+  padding: 0 2px;
+  line-height: 1;
+}
+
+.dictionary-remove:hover {
+  color: var(--error);
 }
 
 /* Source Editor */

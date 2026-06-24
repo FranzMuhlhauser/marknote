@@ -27,8 +27,25 @@ export function Outline({ editor }: OutlineProps) {
   }, [editor?.state.doc])
 
   const goTo = (pos: number) => {
-    editor?.commands.setTextSelection({ from: pos + 1, to: pos + 1 })
-    editor?.commands.focus()
+    if (!editor) return
+
+    // Set selection and focus the editor
+    editor.commands.setTextSelection({ from: pos + 1, to: pos + 1 })
+    editor.commands.focus()
+
+    // Scroll into view using native DOM for smooth scrolling
+    const domNode = editor.view.nodeDOM(pos) as HTMLElement
+    if (domNode && domNode.scrollIntoView) {
+      domNode.scrollIntoView({ behavior: 'smooth', block: 'center' })
+
+      // Highlight temporarily
+      domNode.classList.add('heading-highlight')
+      setTimeout(() => {
+        if (domNode.classList) {
+          domNode.classList.remove('heading-highlight')
+        }
+      }, 1500)
+    }
   }
 
   return (

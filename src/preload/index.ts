@@ -21,6 +21,16 @@ const api = {
   moveFile: (oldPath: string, newPath: string) => ipcRenderer.invoke('file:move', oldPath, newPath),
   onOpenFile: (callback: (filePath: string) => void) => {
     ipcRenderer.on('file:open', (_event, filePath) => callback(filePath))
+  },
+  getStartupFile: () => ipcRenderer.invoke('app:getStartupFile'),
+  addCustomWord: (word: string) => ipcRenderer.invoke('spellcheck:addWord', word),
+  removeCustomWord: (word: string) => ipcRenderer.invoke('spellcheck:removeWord', word),
+  addCustomWords: (words: string[]) => ipcRenderer.invoke('spellcheck:addWords', words),
+  onSpellcheckReplaceWord: (callback: (replacement: string, word: string) => void) => {
+    ipcRenderer.on('spellcheck:replace-word', (_event, replacement, word) => callback(replacement, word))
+  },
+  onSpellcheckAddWord: (callback: (word: string) => void) => {
+    ipcRenderer.on('spellcheck:add-word', (_event, word) => callback(word))
   }
 }
 
