@@ -31,6 +31,26 @@ turndown.addRule('taskList', {
   }
 })
 
+turndown.addRule('mathBlock', {
+  filter: (node: any) => {
+    return node.nodeName === 'DIV' && node.getAttribute?.('data-math-block') !== null
+  },
+  replacement: (_content: string, node: any) => {
+    const tex = node.getAttribute('data-tex') || ''
+    return `$$\n${tex}\n$$`
+  }
+})
+
+turndown.addRule('mathInline', {
+  filter: (node: any) => {
+    return node.nodeName === 'SPAN' && node.getAttribute?.('data-math-inline') !== null
+  },
+  replacement: (_content: string, node: any) => {
+    const tex = node.getAttribute('data-tex') || ''
+    return `$${tex}$`
+  }
+})
+
 function preprocessTaskLists(source: string): string {
   const blocks: string[] = []
   let s = source.replace(/(```[\s\S]*?```|`[^`\n]+`)/g, (m) => {
@@ -55,8 +75,26 @@ function preprocessTaskLists(source: string): string {
   return s
 }
 
+function preprocessMath(source: string): string {
+  const blocks: string[] = []
+  let s = source.replace(/(```[\s\S]*?```|`[^`\n]+`)/g, (m) => {
+    blocks.push(m)
+    return `\x00MP${blocks.length - 1}\x00`
+  })
+  s = s.replace(/\$\$([\s\S]*?)\$\$/g, (_, tex) => {
+    const t = tex.trim().replace(/&/g, '&amp;').replace(/"/g, '&quot;')
+    return `<div data-math-block data-tex="${t}"></div>\n\n`
+  })
+  s = s.replace(/(?<!\$)\$(\S[^$\n]*?)\$(?!\$)/g, (_, tex) => {
+    const t = tex.trim().replace(/&/g, '&amp;').replace(/"/g, '&quot;')
+    return `<span data-math-inline data-tex="${t}"></span>`
+  })
+  s = s.replace(/\x00MP(\d+)\x00/g, (_, i) => blocks[Number(i)])
+  return s
+}
+
 export function mdToHtml(source: string): string {
-  return md.render(preprocessTaskLists(source))
+  return md.render(preprocessTaskLists(preprocessMath(source)))
 }
 
 export function htmlToMd(html: string): string {

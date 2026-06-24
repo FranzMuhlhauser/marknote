@@ -20,7 +20,7 @@ interface TabBarProps {
 }
 
 export function TabBar({ tabs, activeId, onSelect, onClose, onCloseOthers, onCloseAll, onCloseRight, onCloseSaved, onReorder }: TabBarProps) {
-  if (tabs.length <= 1 && !tabs[0]?.filePath && !tabs[0]?.modified) return null
+  if (tabs.length === 0) return null
 
   return (
     <div className="tabbar">
@@ -142,15 +142,13 @@ function DraggableTab({ tab, isActive, tabsLength, onSelect, onClose, onCloseOth
       onDrop={handleDrop}
     >
       <span className="tab-title">{tab.title}{tab.modified ? ' ●' : ''}</span>
-      {tabsLength > 1 && (
-        <button
-          className="tab-close"
-          onClick={e => { e.stopPropagation(); onClose(tab.id) }}
-          title="Cerrar"
-        >
-          ×
-        </button>
-      )}
+      <button
+        className="tab-close"
+        onClick={e => { e.stopPropagation(); onClose(tab.id) }}
+        title="Cerrar"
+      >
+        ×
+      </button>
 
       {showMenu && (
         <div

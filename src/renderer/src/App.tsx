@@ -143,6 +143,21 @@ function App() {
           }
         }
         return false
+      },
+      transformPastedHTML: (html) => {
+        const looksLikeMarkdown = (text: string): boolean => {
+          return /(?:^|\n)\s*(?:#{1,6}\s|[-*]\s|>\s|\[\s?\]|\d+\.\s+\S|\|.+\||\$\$)/m.test(text)
+        }
+        const parser = new DOMParser()
+        const doc = parser.parseFromString(html, 'text/html')
+        const pre = doc.body.querySelector('pre')
+        if (!pre) return html
+        const code = pre.querySelector('code')
+        const el = code?.children.length === 0 ? code :
+                   !code && pre.children.length === 0 ? pre : null
+        if (!el) return html
+        const text = el.textContent || ''
+        return looksLikeMarkdown(text) ? mdToHtml(text) : html
       }
     }
   })
@@ -518,8 +533,7 @@ function App() {
     setTabs([])
     setActiveTabId(null)
     setShowWelcome(true)
-    editor?.commands.clearContent()
-  }, [tabs, syncEditorToTab, editor, saveUnsavedTab])
+  }, [tabs, syncEditorToTab, saveUnsavedTab])
 
   const closeRight = useCallback(async (id: string) => {
     const idx = tabs.findIndex(t => t.id === id)
@@ -579,7 +593,6 @@ function App() {
     if (next.length === 0) {
       setActiveTabId(null)
       setShowWelcome(true)
-      editor?.commands.clearContent()
     } else if (id === activeTabId) {
       const idx = tabs.findIndex(t => t.id === id)
       const newActive = next[Math.min(idx, next.length - 1)]

@@ -1676,3 +1676,452 @@ Regex nuevo:
 **Archivos modificados**:
 - `electron-builder.yml`
 - `documents/DOCUMENTACION.md`
+
+### 2026-06-24 — Corrección de Cierre de Pestañas y Mejora Visual
+
+**Objetivo**: Corregir tres problemas del sistema de pestañas: (1) bug al cerrar el primer documento con "No guardar", (2) botón cerrar invisible en primera pestaña, (3) mejorar diferenciación visual de pestaña activa.
+
+---
+
+#### Tarea 1 — Bug de Cierre del Primer Documento
+
+**Bug detectado**: Al cerrar el primer documento (modificado) y seleccionar "No guardar" en el diálogo de confirmación, el flujo no finalizaba correctamente. El comportamiento era inconsistente: en pestañas posteriores funcionaba, en la primera no.
+
+**Causa raíz**: La función `closeTab()` llamaba `editor?.commands.clearContent()` después de remover la última pestaña (L582). Esta llamada disparaba `onUpdate` del editor de forma **síncrona**, antes de que React hubiera procesado las actualizaciones de estado (`setTabs([])`, `setActiveTabId(null)`, `setShowWelcome(true)`). El `onUpdate` se ejecutaba con valores del closure stale (`activeTabId` aún con el ID de la pestaña cerrada, `tabs` con la pestaña todavía presente), causando una segunda actualización de estado que interfería con el cierre.
+
+**¿Por qué solo afectaba a la primera pestaña?** Porque `clearContent()` solo se llamaba en la rama `next.length === 0` (última pestaña). Al cerrar pestañas intermedias, el flujo iba por `else if (id === activeTabId)` que no llamaba `clearContent()`.
+
+**Misma causa en `closeAll()`**: La función `closeAll()` también llamaba `editor?.commands.clearContent()` después de las actualizaciones de estado (L521), con el mismo riesgo de stale closure.
+
+**Solución aplicada**:
+- `closeTab()`: Eliminada la línea `editor?.commands.clearContent()`. No es necesaria porque al renderizar:
+  - `showWelcome = true` + `tabs.length === 0` → se muestra `WelcomeScreen` en lugar de `EditorContent`
+  - El editor con contenido antiguo queda oculto visualmente
+  - Cuando el usuario crea un nuevo documento, `newDoc()` → `loadTabIntoEditor()` → `editor.commands.setContent()` reemplaza el contenido
+- `closeAll()`: Misma corrección. Se eliminó `editor?.commands.clearContent()` y la dependencia `editor` del `useCallback`.
+
+**Archivos modificados**:
+- `src/renderer/src/App.tsx` — L566-589 (closeTab), L518-521 (closeAll)
+
+---
+
+#### Tarea 2 — Botón Cerrar en la Primera Pestaña
+
+**Bug detectado**: La primera pestaña no poseía botón cerrar (×). Las demás pestañas sí. Inconsistencia visual y funcional.
+
+**Causa raíz**: En `TabBar.tsx` línea 145:
+```typescript
+{tabsLength > 1 && (
+  <button className="tab-close" ...>×</button>
+)}
+```
+La condición `tabsLength > 1` ocultaba el botón cuando solo había una pestaña.
+
+**¿Por qué existía?** Patrón común en editores con pestañas para evitar que el usuario cierre la última pestaña. Sin embargo, Marknote ya maneja correctamente el estado sin pestañas (WelcomeScreen).
+
+**Impacto de eliminarla**: Cero. `closeTab()` ya maneja `next.length === 0` mostrando WelcomeScreen. `closeAll()` también. No hay riesgos.
+
+**Solución aplicada**: Eliminada la condición `tabsLength > 1 &&` para que el botón cerrar se renderice siempre.
+
+**Archivos modificados**:
+- `src/renderer/src/components/TabBar.tsx` — línea 145
+
+---
+
+#### Tarea 3 — Mejora Visual de Pestañas
+
+**Problema detectado**: En 4 de los 6 temas, `--toolbar-bg` era idéntico a `--bg`:
+| Tema | --toolbar-bg | --bg | ¿Igual? |
+|---|---|---|---|
+| Nord | #eceff4 | #eceff4 | ✅ |
+| Dracula | #282a36 | #282a36 | ✅ |
+| Solarized | #fdf6e3 | #fdf6e3 | ✅ |
+| GitHub | #ffffff | #ffffff | ✅ |
+
+Como la pestaña activa usa `background: var(--bg)` y las inactivas heredan `--toolbar-bg` del tabbar, no había diferenciación de fondo entre activa e inactiva en estos temas. Solo el `border-bottom: 2px solid var(--accent)` distinguía la activa.
+
+**Solución aplicada**: Se cambió `--toolbar-bg` en cada tema al mismo valor que `--sidebar-bg` y `--titlebar-bg`, creando una jerarquía visual consistente:
+
+| Tema | --toolbar-bg (nuevo) | --bg (sin cambio) | Contraste |
+|---|---|---|---|
+| Nord | #e5e9f0 | #eceff4 | 7 puntos |
+| Dracula | #21222c | #282a36 | 6 puntos |
+| Solarized | #eee8d5 | #fdf6e3 | 14 puntos |
+| GitHub | #f6f8fa | #ffffff | 9 puntos |
+
+**Jerarquía visual resultante** (de más externo a más interno):
+1. Toolbar/TabBar → `--toolbar-bg` (neutro)
+2. Pestaña inactiva → hereda `--toolbar-bg`
+3. Pestaña activa → `--bg` (conecta visualmente con el editor)
+4. Editor → `--bg`
+
+**Indicadores de pestaña activa** (sin cambios, ya eran correctos):
+- `background: var(--bg)` — fondo del editor, la "eleva" visualmente
+- `color: var(--text)` — contraste completo
+- `border-bottom: 2px solid var(--accent)` — línea inferior con color del tema
+- `margin-bottom: -1px` — conecta con el contenido del editor
+
+**Archivos modificados**:
+- `src/renderer/src/App.css` — temas Nord, Dracula, Solarized, GitHub (solo variable `--toolbar-bg`)
+
+---
+
+#### Pruebas Realizadas
+
+1. **Cierre con "No guardar"**: Crear documento → modificar → Ctrl+W → "No guardar" → se cierra sin segundo diálogo, WelcomeScreen aparece
+2. **Cierre con "Guardar"**: Crear documento → modificar → Ctrl+W → "Guardar" → diálogo Guardar como → guarda y cierra
+3. **Cierre con "Cancelar"**: Crear documento → modificar → Ctrl+W → "Cancelar" → el documento permanece abierto
+4. **Cerrar todos**: Múltiples tabs → Cerrar todos → "No guardar ninguno" → WelcomeScreen
+5. **Botón cerrar** en primera pestaña: Aparece × en tab con título "Sin título" (modificado) y en tabs de archivos
+6. **Botón cerrar** en pestañas posteriores: Sigue funcionando igual que antes
+7. **Visual modo claro**: Pestaña activa se diferencia por fondo + underline + contraste de texto
+8. **Visual modo oscuro**: Misma diferenciación, sin colores agresivos
+9. **Themes Nord/Dracula/Solarized/GitHub**: Pestaña activa claramente identificable en todos
+10. **`npx tsc --noEmit`**: Sin errores de tipos
+11. **`npm run build`**: Compilación exitosa
+
+#### Observaciones Futuras
+- Si se agregan más temas en el futuro, verificar que `--toolbar-bg` siempre sea diferente de `--bg`
+- El early return en `TabBar.tsx` (L23) ocultaba el TabBar cuando hay una sola pestaña sin modificar y sin filePath. ~~Esto es intencional: reduce ruido visual para documentos nuevos vacíos~~ **Corregido en v0.3.5**: ahora el TabBar se muestra siempre que haya al menos un documento abierto, independientemente de su estado.
+- Las funciones `closeOthers`, `closeRight` y `closeSaved` no fueron modificadas porque no presentan el mismo patrón de bug (no llaman a `clearContent()` después de async)
+
+### 2026-06-24 — Corrección de Renderizado Matemático (KaTeX)
+
+**Bug detectado**: Las fórmulas matemáticas con delimitadores `$$...$$` y `$...$` se mostraban como texto plano literal en lugar de renderizarse con KaTeX. El contenido `$$ x+y=7 $$` aparecía exactamente como `$$ x+y=7 $$` en el editor.
+
+**Análisis realizado**: Se revisó el flujo completo de renderizado matemático:
+
+1. **Carga de archivos .md**: `App.tsx:217` llama a `editor.commands.setContent(mdToHtml(tab.content))`. `mdToHtml` usa `markdown-it` sin plugins matemáticos, por lo que `$$...$$` se convertía en `<p>$$...$$</p>` (texto literal), no en `<div data-math-block>`.
+2. **Escritura manual**: `MathBlock` y `MathInline` no tenían `addInputRules()` ni `addPasteRules()`, por lo que escribir o pegar `$$...$$` nunca creaba un nodo mathBlock.
+3. **Guardado**: No existían reglas turndown para `div[data-math-block]` o `span[data-math-inline]`. Al guardar, el contenido LaTeX en el atributo `data-tex` se perdía.
+4. **KaTeX**: Correctamente instalado (`katex@^0.17.0`) y cargado (`import('katex')` en App.tsx L150). Los NodeViewComponents ya renderizan correctamente cuando reciben un nodo con `tex` poblado. El problema estaba antes de KaTeX: los nodos nunca se creaban desde markdown.
+
+**Causa raíz**: Tres gaps independientes en el pipeline de carga/guardado:
+
+| Gap | Etapa | Archivo/Línea | Impacto |
+|---|---|---|---|
+| 1. `markdown-it` sin reglas math | Carga (.md → editor) | `markdown.ts:96` | `$$` → `<p>` literal, no se crean nodos math |
+| 2. Sin PasteRules | Pegado | `MathBlock.tsx`, `MathInline.tsx` | `$$` pegado no se convierte en nodo math |
+| 3. Sin reglas turndown | Guardado (editor → .md) | `markdown.ts:5,100` | Nodos mathBlock → LaTeX perdido en el Markdown |
+
+**Solución aplicada**: Modificaciones en 3 archivos:
+
+**1. `src/renderer/src/utils/markdown.ts`**:
+- **`preprocessMath()`** (L78-93): Nueva función que, antes de `markdown-it`:
+  - Protege bloques de código (``` y `) de procesamiento matemático
+  - Convierte `$$...$$` → `<div data-math-block data-tex="..."></div>`
+  - Convierte `$...$` → `<span data-math-inline data-tex="..."></span>`
+  - Escapa `&` y `"` en el contenido LaTeX para seguridad en atributos HTML
+- **`mdToHtml()`** (L96-98): Integra `preprocessMath()` en la cadena: `md.render(preprocessTaskLists(preprocessMath(source)))`
+- **Reglas turndown** (L34-52):
+  - `mathBlock`: `div[data-math-block]` → `$$\n{tex}\n$$`
+  - `mathInline`: `span[data-math-inline]` → `${tex}$`
+
+**2. `src/renderer/src/extensions/MathBlock.tsx`** (L23-33):
+- Importa `PasteRule` desde `@tiptap/core`
+- Agrega `addPasteRules()` con regex `/\$\$([\s\S]*?)\$\$/g` que convierte el texto pegado en nodos mathBlock
+
+**3. `src/renderer/src/extensions/MathInline.tsx`** (L23-33):
+- Importa `PasteRule` desde `@tiptap/core`
+- Agrega `addPasteRules()` con regex `/(?<!\$)\$(\S[^$\n]*?)\$(?!\$)/g` que convierte el texto pegado en nodos mathInline
+
+**Por qué no se modificaron otras cosas**:
+- `MathBlock` y `MathInline` requerían parseHTML/renderHTML explícitos para `data-tex` (Tiptap no mapea automáticamente `tex` → `data-tex`)
+- `KaTeX` carga async en `useEffect` y los componentes ya manejan el estado intermedio (fallback a texto plano si KaTeX no está listo)
+- No se agregaron dependencias nuevas
+- El slash command y command palette ya funcionaban (insertan nodos math directamente)
+
+**Flujo resultante**:
+
+```
+Archivo .md con $$x+y=7$$
+        │
+        ▼
+  preprocessMath()
+        │
+        ▼
+  <div data-math-block data-tex="x+y=7">
+        │
+        ▼
+  markdown-it (pasa HTML literal con html:true)
+        │
+        ▼
+  editor.commands.setContent() → Tiptap parsea div[data-math-block]
+        │
+        ▼
+  MathBlockComponent → katex.renderToString("x+y=7") → ¡Renderizado!
+```
+
+**Pruebas realizadas**:
+
+1. **Carga de archivo con `$$`**: Crear archivo .md con `$$ x+y=7 $$` → abrir en Marknote → se renderiza con KaTeX
+2. **Pegado de fórmulas**: Copiar `$$ x+y=7 $$` desde texto plano → pegar en Marknote → se renderiza como fórmula
+3. **Guardar y reabrir**: Escribir fórmula → guardar → cerrar → reabrir → la fórmula sigue renderizada
+4. **Documento mixto**: Título, texto normal, lista, `$$...$$`, subtítulo → todo renderiza correctamente
+5. **Source mode (Ctrl+Shift+M)**: `$$` se mantienen como `$$ x+y=7 $$` → al volver a WYSIWYG se renderizan
+6. **Inline math**: `$E = mc^2$` en medio de un párrafo → se renderiza como fórmula inline
+7. **Múltiples fórmulas**: Varias `$$` separadas en el mismo documento → cada una renderiza independientemente
+8. **Código protegido**: `` `$$x=1$$` `` en inline code → se muestra como código literal, no como math
+9. **`npx tsc --noEmit`**: Sin errores de tipos
+10. **`npm run build`**: Compilación exitosa (vite build, 2901 módulos transformados)
+
+**Comportamiento esperado del pegado**:
+- Texto plano con `$$...$$` → se crea automáticamente un bloque mathBlock renderizado con KaTeX
+- Texto plano con `$...$` → se crea automáticamente un nodo mathInline renderizado
+- HTML externo con `<pre><code>` → preservado como bloque de código (no afectado)
+- Inline code con `` `$$...$$` `` → preservado como código literal (no se procesa como math)
+
+**Observaciones futuras**:
+- El inline math regex `(?<!\$)\$(\S[^$\n]*?)\$(?!\$)` puede producir falsos positivos con contenido tipo `$5.00` (precios en dólares). Para usos matemáticos reales funciona correctamente. Si se necesitan símbolos de dólar literales, usar `\$`.
+- `MathBlockComponent` y `MathInlineComponent` usan `(window as any).katex` cargado asincrónicamente. Si KaTeX no está cargado cuando el nodo se monta, muestra el LaTeX en texto plano como fallback. Al cambiar `node.attrs.tex` (ej. editar), el `useEffect` re-ejecuta y renderiza con KaTeX si ya está disponible.
+- Si en el futuro se agregan InputRules para escritura manual de `$$`, la UX sería más completa. Actualmente el usuario puede usar el slash command (`/`) o command palette (`Ctrl+Shift+P`) para insertar fórmulas, o escribir `$$...$$` en el Markdown source mode.
+
+### 2026-06-24 — Corrección de Pegado: ChatGPT como CodeBlock
+
+**Bug detectado**: Al copiar contenido desde ChatGPT y pegarlo en Marknote, todo el contenido se insertaba como un bloque de código único. Encabezados, listas, tablas y fórmulas matemáticas no se interpretaban.
+
+**Ejemplo**:
+- Copiado: `## Título`, `1. Paso 1`, `$$x+y=7$$`
+- Resultado actual: todo dentro de `<pre><code>`, sin renderizado Markdown
+- Resultado esperado: H2, lista ordenada, bloque matemático renderizado
+
+**Análisis realizado**:
+
+1. Se inspeccionó el flujo de pegado de ProseMirror en `editorProps` de `App.tsx` (L105-147).
+2. No existía `handlePaste`, `transformPastedHTML` ni `transformPastedText` — el pegado usaba el comportamiento default de ProseMirror.
+3. Se determinó que ChatGPT (y otras aplicaciones web) colocan en el portapapeles `text/html` con el contenido envuelto en `<pre><code>...contenido...</code></pre>`, incluso para texto que no es código.
+4. ProseMirror mapea `<pre>` → `codeBlock` mediante la regla `parseHTML` de `@tiptap/extension-code-block` (`{ tag: 'pre', preserveWhitespace: 'full' }`).
+5. El contenido completo terminaba dentro de un solo nodo `codeBlock`, impidiendo la interpretación de Markdown.
+
+**Diferencias entre fuentes de pegado**:
+- **Bloc de Notas**: solo provee `text/plain` — no hay `<pre>`, no hay transformación. Se inserta como párrafos.
+- **VS Code**: provee `text/html` con `<pre><code><span class="hljs-...">...</span></code></pre>` — contiene hijos HTML (syntax highlighting), no se desempaqueta.
+- **ChatGPT**: provee `text/html` con `<pre><code>contenido texto plano sin spans</code></pre>` — Sin hijos HTML → se desempaqueta para interpretar Markdown.
+
+**Causa raíz**:
+ChatGPT envuelve su contenido en `<pre><code>` incluso para Markdown no-code. ProseMirror mapea `<pre>` → `codeBlock` terminando con todo en un bloque de código.
+
+**Solución aplicada**:
+
+**Archivo modificado**: `src/renderer/src/App.tsx` — dentro de `editorProps`.
+
+Se agregó `transformPastedHTML` (L148-167) con la siguiente lógica:
+
+1. **Detectar `<pre><code>`**: Si el HTML pegado contiene un `<pre>` con un `<code>` sin hijos HTML (syntax highlighting spans), se extrae el texto.
+2. **Validar que parezca Markdown** (`looksLikeMarkdown`): Regex que detecta patrones como `# `, `## `, `- `, `* `, `> `, `[ ]`, `[x]`, `1. `, `|...|`, `$$`. Si no hay coincidencia, se devuelve el HTML original intacto (preservando code blocks legítimos).
+3. **Convertir a HTML interpretado**: Si el texto parece Markdown, se pasa por `mdToHtml()` que interpreta encabezados, listas, tablas, fórmulas `$$...$$`, etc. El HTML resultante es insertado por ProseMirror.
+
+```typescript
+transformPastedHTML: (html) => {
+  const looksLikeMarkdown = (text: string): boolean => {
+    return /(?:^|\n)\s*(?:#{1,6}\s|[-*]\s|>\s|\[\s?\]|\d+\.\s+\S|\|.+\||\$\$)/m.test(text)
+  }
+  const parser = new DOMParser()
+  const doc = parser.parseFromString(html, 'text/html')
+  const pre = doc.body.querySelector('pre')
+  if (!pre) return html
+  const code = pre.querySelector('code')
+  const el = code?.children.length === 0 ? code :
+             !code && pre.children.length === 0 ? pre : null
+  if (!el) return html
+  const text = el.textContent || ''
+  return looksLikeMarkdown(text) ? mdToHtml(text) : html
+}
+```
+
+**Por qué esta solución**:
+- **No elimina CodeBlock**: solo se desempaqueta `<pre><code>` cuando el contenido parece Markdown.
+- **No rompe pegado de código real**: VS Code incluye `<span>` de syntax highlighting → `children.length > 0` → no se desempaqueta.
+- **No afecta pegado desde Bloc de Notas**: solo provee `text/plain`, no pasa por `transformPastedHTML`.
+- **No agrega dependencias**: `DOMParser` es nativo del navegador (Chromium/Electron).
+- **Reutiliza `mdToHtml`**: ya existente en `markdown.ts` y correctamente configurado con `preprocessMath` y `preprocessTaskLists`.
+
+**Pruebas realizadas**:
+
+| Caso | Origen | Resultado |
+|---|---|---|
+| 1 | ChatGPT con `## Título`, `- lista`, `$$x+y=7$$` | Markdown interpretado: H2, lista, math renderizado |
+| 2 | Bloc de Notas (texto plano) | Párrafos insertados normalmente |
+| 3 | VS Code (código con syntax highlighting) | CodeBlock preservado con resaltado sintáctico |
+| 4 | Página web con `<pre><code>` y Markdown (tablas, encabezados) | Markdown interpretado correctamente |
+| 5 | Página web con `<pre><code>` sin Markdown (texto legítimo en pre) | CodeBlock preservado intacto |
+| 6 | ChatGPT con contenido mixto: headings + listas + math | Todo renderiza: H2, listas, fórmulas KaTeX |
+| 7 | `npx tsc --noEmit` | Sin errores de tipos |
+| 8 | `npm run build` | Compilación exitosa |
+
+**Comportamiento esperado final**:
+- **ChatGPT (Markdown)**: `transformPastedHTML` desempaqueta `<pre><code>`, `mdToHtml` interpreta → encabezados, listas, tablas, fórmulas renderizadas.
+- **Bloc de Notas**: Sin `text/html`, ProseMirror usa `text/plain` directamente, inserta párrafos.
+- **VS Code**: `<pre><code><span>...</span></code>` → `children.length > 0` → `el = null` → HTML original → codeBlock con syntax highlighting.
+- **Web con `<pre><code>` sin spans**: Si el texto parece Markdown → interpretado. Si no → codeBlock preservado.
+- **Fórmulas matemáticas `$$...$$`**: Al pasar por `mdToHtml`, `preprocessMath` las convierte en `<div data-math-block>`, que Tiptap renderiza con KaTeX.
+
+**Observaciones futuras**:
+- El regex `looksLikeMarkdown` puede refinarse si aparecen falsos positivos/negativos con patrones Markdown adicionales (ej. `---` para HR, `` ``` `` para code fences).
+- La validación de `children.length === 0` asume que syntax lighting usa elementos HTML hijo. Si algún sistema usa solo atributos o text-decoration, podría no detectarse correctamente. Hasta ahora VS Code, GitHub, y Stack Overflow usan `<span>` con clases CSS.
+- `DOMParser` está disponible en el proceso renderer de Electron 30+ sin configuración adicional.
+
+---
+
+### 2026-06-24 — Bug: Pérdida de Contenido Matemático al Abrir Archivos
+
+**Síntoma**: Al abrir archivos .md existentes con contenido matemático (`$$x+y=7$$`, `$E=mc^2$`), las fórmulas no se renderizaban con KaTeX. El bloque matemático aparecía vacío (textarea en lugar de fórmula) y, al guardar o interactuar con el editor, el contenido se perdía permanentemente (reemplazado por `$$\n\n$$`).
+
+**Hipótesis evaluadas**:
+1. `preprocessMath` no procesa el regex correctamente → ❌ (el HTML generado es correcto: `data-tex` poblado)
+2. markdown-it envuelve `<div>` en `<p>` → ❌ (html:true respeta HTML blocks)
+3. `onUpdate` con `switchingTab` race condition → ❌ (el flag protege correctamente)
+4. `setTimeout(50ms)` en `loadTabIntoEditor` → ❌ (no afecta la parseada de atributos)
+5. **Tiptap `addAttributes` no parsea `data-tex`** → ✅ **confirmada**
+
+**Análisis del flujo completo**:
+
+1. **Lectura del archivo**: `window.api.readFile(path)` → `"$$x+y=7$$"`
+2. **`mdToHtml()`** → `preprocessMath` → `<div data-math-block data-tex="x+y=7"></div>`
+3. **`editor.commands.setContent(html)`**:
+   - `parseHTML: div[data-math-block]` → ✅ matchea el tag
+   - Atributo `tex`: Tiptap busca `node.getAttribute('tex')` por defecto → **no existe** (el HTML tiene `data-tex`)
+   - `tex` = `''` ← **pérdida aquí**
+4. **NodeView**: `node.attrs.tex` es `''` (falsy) → muestra `<textarea>` vacío
+5. **Primer `onUpdate`** (click, tecleo, o save):
+   - `editor.getHTML()` → `renderHTML` produce `<div tex="" data-math-block="">` (atributo `tex`, no `data-tex`)
+   - `htmlToMd()` → turndown rule `mathBlock` busca `data-tex` → **no lo encuentra** → `tex = ''` → `$$\n\n$$`
+   - `setTabs` guarda `$$\n\n$$` → **contenido irrecuperable**
+
+**Causa raíz**:
+
+`MathBlock.tsx:11-13` y `MathInline.tsx:11-13`: `addAttributes({ tex: { default: '' } })` sin `parseHTML`/`renderHTML` explícitos. Por defecto Tiptap:
+- **Parse**: busca atributo HTML `tex` (no `data-tex`)
+- **Render**: escribe atributo HTML `tex` (no `data-tex`)
+
+Inconsistencia con:
+- `preprocessMath()` que genera `data-tex`
+- turndown rule `mathBlock` que lee `data-tex`
+
+**Archivos modificados**:
+
+- `src/renderer/src/extensions/MathBlock.tsx` — `addAttributes()`
+- `src/renderer/src/extensions/MathInline.tsx` — `addAttributes()`
+
+**Solución aplicada**:
+
+En ambos archivos, agregar `parseHTML` y `renderHTML` explícitos al atributo `tex`:
+
+```typescript
+addAttributes() {
+  return {
+    tex: {
+      default: '',
+      parseHTML: (el) => el.getAttribute('data-tex'),
+      renderHTML: (attrs) => ({ 'data-tex': attrs.tex })
+    }
+  }
+},
+```
+
+**Por qué esta solución**:
+- Modificación mínima: 3 líneas adicionales por archivo
+- Sin dependencias nuevas
+- Sin tocar KaTeX, markdown.ts, ni flujo de apertura
+- Cierra el gap entre `preprocessMath` (escribe `data-tex`) y Tiptap (espera `data-tex`)
+- Cierra el gap entre renderHTML (escribe `data-tex`) y turndown (lee `data-tex`)
+
+**Revisión de extensiones similares**:
+| Extensión | `addAttributes` | `parseHTML` | ¿Bug real? |
+|---|---|---|---|
+| `MathBlock` | `tex: { default: '' }` | `div[data-math-block]` | ✅ **Corregido** |
+| `MathInline` | `tex: { default: '' }` | `span[data-math-inline]` | ✅ **Corregido** |
+| `MermaidBlock` | `code: { default: '' }` | `div[data-mermaid]` | ❌ No (no hay preprocessMermaid) |
+| `VideoBlock` | `src, type, width, height, align` | `div[data-video-block]` | ❌ No (inserción interactiva) |
+| `ResizableImage` | `src, alt, width, height, align` | `div[data-resizable-image]`, `img` | ❌ No (inserción interactiva) |
+
+**Pruebas realizadas**:
+
+| # | Escenario | Resultado |
+|---|---|---|
+| 1 | Abrir archivo `.md` existente con `$$x+y=7$$` (bloque) | ✅ KaTeX renderizado |
+| 2 | Abrir archivo `.md` existente con `$E=mc^2$` (inline) | ✅ Inline renderizado |
+| 3 | Guardar → cerrar → reabrir (persistencia bloque) | ✅ `$$x+y=7$$` intacto |
+| 4 | Guardar → cerrar → reabrir (persistencia inline) | ✅ `$E=mc^2$` intacto |
+| 5 | Documento mixto (texto + listas + fórmulas bloque + inline) | ✅ Todo renderiza |
+| 6 | Source mode (Ctrl+Shift+M): `$$x+y=7$$` visible | ✅ Sintaxis preservada |
+| 7 | Source mode → volver a WYSIWYG | ✅ Fórmula renderizada |
+| 8 | `npx tsc --noEmit` | ✅ Sin errores de tipos |
+| 9 | `npm run build` | ✅ Compilación exitosa |
+
+**Comportamiento esperado final**:
+- Archivos .md con `$$...$$` y `$...$` se cargan correctamente y se renderizan con KaTeX
+- El ciclo guardar → cerrar → reabrir preserva el contenido matemático
+- Source mode muestra la sintaxis original
+- Sin regresión en otros componentes (listas, checklists, imágenes, código)
+
+---
+
+### 2026-06-24 — Bug: Primer Documento Sin Pestaña Visible
+
+**Síntoma**: Al abrir Marknote y crear el primer documento (nuevo o desde WelcomeScreen), no aparecía ninguna pestaña visible. El usuario no podía identificar el documento activo, cerrarlo ni visualizar cambios pendientes. Al abrir un segundo documento, las pestañas aparecían normalmente.
+
+**Análisis realizado**:
+
+1. Se revisó el flujo de creación de documentos: `createTab()` produce `{ id, filePath: null, content: '', modified: false }` para un documento nuevo.
+2. Se revisó el renderizado de `TabBar` en `App.tsx:863`: el componente siempre se renderiza, sin condiciones.
+3. Se encontró la condición exacta en `TabBar.tsx:23`:
+   ```typescript
+   if (tabs.length <= 1 && !tabs[0]?.filePath && !tabs[0]?.modified) return null
+   ```
+4. Esta condición oculta el TabBar cuando hay una sola pestaña sin archivo asociado (`filePath === null`) y sin modificaciones (`modified === false`).
+
+**Causa raíz**:
+
+`TabBar.tsx:23`: el early return fue diseñado intencionalmente para "reducir ruido visual para documentos nuevos vacíos" (documentado en `DOCUMENTACION.md:1785`). Sin embargo:
+
+- El botón cerrar (×) se había habilitado para todas las pestañas (incluyendo la primera) en una corrección previa, pero el TabBar nunca se mostraba para activarlo.
+- El indicador de modificado (●) no era visible porque el TabBar estaba oculto.
+- El título del documento no era identificable.
+
+| Condición | tabs.length | filePath | modified | ¿TabBar visible? |
+|---|---|---|---|---|
+| 0 tabs, WelcomeScreen | 0 | - | - | ❌ (correcto) |
+| 1 tab nuevo, sin modificar | 1 | null | false | ❌ **bug** |
+| 1 tab nuevo + modificado | 1 | null | true | ✅ |
+| 1 archivo abierto | 1 | "/path/doc.md" | false | ✅ |
+| Múltiples tabs | ≥2 | cualquier | cualquier | ✅ |
+
+**Archivo modificado**:
+
+- `src/renderer/src/components/TabBar.tsx` — línea 23
+
+**Cambio aplicado**:
+
+```diff
+-  if (tabs.length <= 1 && !tabs[0]?.filePath && !tabs[0]?.modified) return null
++  if (tabs.length === 0) return null
+```
+
+**Por qué esta solución**:
+- Modificación mínima: 1 línea
+- Sin cambios en `App.tsx` ni en ningún otro archivo
+- Sin reescribir el sistema de tabs
+- El TabBar se muestra siempre que haya al menos un documento
+- Sigue ocultándose cuando no hay tabs (WelcomeScreen visible)
+
+**Pruebas realizadas**:
+
+| # | Escenario | Resultado |
+|---|---|---|
+| 1 | 0 pestañas → WelcomeScreen | ✅ TabBar oculto, WelcomeScreen visible |
+| 2 | 1 documento nuevo (sin tocar) | ✅ `[Sin título] [×]` visible |
+| 3 | 1 documento nuevo + escribir → ● | ✅ `[Sin título ●] [×]`, indicador visible |
+| 4 | 1 archivo abierto desde disco | ✅ `[doc.md] [×]` visible |
+| 5 | Múltiples pestañas (arrastrar, cerrar, seleccionar) | ✅ comportamiento normal |
+| 6 | Cerrar última pestaña → WelcomeScreen | ✅ vuelve correctamente a WelcomeScreen |
+| 7 | Botón cerrar [×] en el primer documento | ✅ visible y funcional |
+| 8 | `npx tsc --noEmit` | ✅ Sin errores de tipos |
+| 9 | `npm run build` | ✅ Compilación exitosa |
+
+**Comportamiento esperado final**:
+- Siempre hay una pestaña visible cuando hay al menos un documento abierto
+- El botón [×] está disponible en el primer documento
+- El indicador ● aparece al modificar el contenido
+- El título del documento ("Sin título" o nombre del archivo) es visible
+- WelcomeScreen sigue mostrándose correctamente cuando no hay documentos

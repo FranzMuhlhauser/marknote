@@ -1,4 +1,4 @@
-import { Node, mergeAttributes } from '@tiptap/core'
+import { Node, mergeAttributes, PasteRule } from '@tiptap/core'
 import { NodeViewWrapper, ReactNodeViewRenderer } from '@tiptap/react'
 import { useRef, useState, useEffect } from 'react'
 
@@ -9,7 +9,13 @@ export const MathBlock = Node.create({
   selectable: true,
 
   addAttributes() {
-    return { tex: { default: '' } }
+    return {
+      tex: {
+        default: '',
+        parseHTML: (el) => el.getAttribute('data-tex'),
+        renderHTML: (attrs) => ({ 'data-tex': attrs.tex })
+      }
+    }
   },
 
   parseHTML() {
@@ -18,6 +24,19 @@ export const MathBlock = Node.create({
 
   renderHTML({ HTMLAttributes }) {
     return ['div', mergeAttributes(HTMLAttributes, { 'data-math-block': '' })]
+  },
+
+  addPasteRules() {
+    return [
+      new PasteRule({
+        find: /\$\$([\s\S]*?)\$\$/g,
+        handler: ({ state, range, match }) => {
+          const tex = (match[1] || '').trim()
+          const nodeType = state.schema.nodes.mathBlock
+          state.tr.replaceRangeWith(range.from, range.to, nodeType.create({ tex }))
+        }
+      })
+    ]
   },
 
   addNodeView() {

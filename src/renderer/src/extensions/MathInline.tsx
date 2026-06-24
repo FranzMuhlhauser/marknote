@@ -1,4 +1,4 @@
-import { Node, mergeAttributes } from '@tiptap/core'
+import { Node, mergeAttributes, PasteRule } from '@tiptap/core'
 import { NodeViewWrapper, ReactNodeViewRenderer } from '@tiptap/react'
 
 export const MathInline = Node.create({
@@ -9,7 +9,13 @@ export const MathInline = Node.create({
   selectable: true,
 
   addAttributes() {
-    return { tex: { default: '' } }
+    return {
+      tex: {
+        default: '',
+        parseHTML: (el) => el.getAttribute('data-tex'),
+        renderHTML: (attrs) => ({ 'data-tex': attrs.tex })
+      }
+    }
   },
 
   parseHTML() {
@@ -18,6 +24,19 @@ export const MathInline = Node.create({
 
   renderHTML({ HTMLAttributes }) {
     return ['span', mergeAttributes(HTMLAttributes, { 'data-math-inline': '' }), 0]
+  },
+
+  addPasteRules() {
+    return [
+      new PasteRule({
+        find: /(?<!\$)\$(\S[^$\n]*?)\$(?!\$)/g,
+        handler: ({ state, range, match }) => {
+          const tex = (match[1] || '').trim()
+          const nodeType = state.schema.nodes.mathInline
+          state.tr.replaceRangeWith(range.from, range.to, nodeType.create({ tex }))
+        }
+      })
+    ]
   },
 
   addNodeView() {
