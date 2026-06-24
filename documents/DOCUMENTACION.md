@@ -400,6 +400,7 @@ El instalador incluye:
 - Wizard de instalación con elección de directorio
 - Acceso directo en escritorio y menú Inicio
 - Ícono personalizado
+- Asociación de archivos `.md` (registro en el sistema operativo para abrir Markdown con Marknote)
 
 ---
 
@@ -408,10 +409,12 @@ El instalador incluye:
 Para crear un nuevo Release:
 
 1. Actualizar `version` en `package.json`
-2. `npm run package:win`
-3. Commit + push + tag (ej. `v0.3.0`)
-4. Crear GitHub Release con el `.exe` adjunto y el tag correspondiente
+2. `npm run build:win` — genera `dist-electron/Marknote-<version>-Setup.exe`
+3. Commit + push
+4. `npm run release` — crea tag, pusha, crea GitHub Release con release notes automáticos, y sube los artefactos (Setup.exe, blockmap, latest.yml)
 5. `electron-updater` detectará automáticamente la nueva versión en los clientes existentes
+
+El script `scripts/release.ps1` automatiza los pasos 4-5. Requiere `gh` CLI autenticado y working tree limpio (o `-Force`).
 
 ---
 
@@ -421,6 +424,7 @@ Para crear un nuevo Release:
 |---|---|---|
 | v0.3.0 | 2026-06-18 | TitleBar+MenuBar unificados, editor 960px + padding ampliado, Outline mejorado, WelcomeScreen con atajos, StatusBar fijo "WYSIWYG" + "Columna", Ctrl+H/W/Tab, resaltado de búsqueda con decoraciones ProseMirror, replaceAll transaccional, focus-mode en Stats + fix clase duplicada, hover con color-mix, vista fuente consistente, 8 variables CSS, sidebars responsives, menú contextual clamp, errores en explorador, Escape→source view, fix shortcut Negrita Ctrl+N→Ctrl+B, transiciones, scrollbars, :focus-visible, actualización automática con electron-updater (descarga + progreso + reinicio) |
 | v0.2.0 | 2026-06-18 | Menú contextual tablas, bloques código copiar/colapsar, imágenes redimensionar/alinear/alt, explorador avanzado (crear, renombrar, duplicar, eliminar, arrastrar), temas personalizados, sección plugins, traducción completa a español, reordenar pestañas, menú contextual pestañas |
+| v0.1.4 | 2026-06-24 | Diccionario personalizado (localStorage), menú contextual ortografía (Menu nativo + IPC + expandToWord), autocompletado descartado, .md file association en instalador NSIS |
 | v0.1.1 | 2026-06-18 | Nuevo doc en blanco, fix open file |
 | v0.1.0 | 2026-06-18 | Versión inicial: editor WYSIWYG, tablas, KaTeX, Mermaid, export, file explorer, source view |
 | v0.3.1 | 2026-06-19 | Corrección flushSync (closeTab, closeOthers, closeRight, closeSaved), Table resize desactivado (`resizable: false`), Table header sort removido, SlashCommand y VideoBlock agregados, TableSizePicker, BoldItalic, TableSort, single instance lock, file association, markdown-it plugins extendidos, DEFAULT_MD template, docs actualizadas |
@@ -571,6 +575,7 @@ Solo si ambos pasan sin errores se considera terminado.
 - Se expone `app:getStartupFile` al renderer para abrir el archivo inicial después de montar la aplicación
 - Segunda instancia envía evento `file:open` a la instancia existente y reutiliza la misma lógica de apertura
 - Renderer escucha `onOpenFile` desde preload y abre el documento recibido usando `openFileFromExplorer`
+- El instalador NSIS registra la asociación `.md` mediante `electron-builder.yml > fileAssociations`, apuntando a `resources/icon.ico` como ícono
 
 ### Bug detectado
 - El archivo `.md` recibido en el arranque no se entregaba de forma confiable al renderer en la primera instancia, lo que provocaba un documento vacío en lugar de cargar el archivo.
@@ -1645,3 +1650,29 @@ Regex nuevo:
 - Si se desea soportar múltiples idiomas, se puede extender `setSpellCheckerLanguages(['es', 'en'])` en el main process
 - El menú contextual de sugerencias es el nativo de Chromium; si se desea uno personalizado, se necesitaría `webContents.on('context-menu')` en el main process
 - La corrección no aplica en bloques de código ni en fórmulas matemáticas (comportamiento correcto, ya que esos NodeViews tienen `contentEditable={false}`)
+
+### 2026-06-24 — Release v0.1.4 y Asociación de Archivos .md
+
+**Objetivo**: Completar el ciclo de release para v0.1.4 incluyendo todas las funcionalidades de corrección ortográfica y asegurar que los archivos `.md` se asocien automáticamente con Marknote en Windows.
+
+**Cambios realizados**:
+
+1. **`electron-builder.yml`**:
+   - Agregada sección `fileAssociations` con extensión `.md`, descripción "Markdown" e icono `resources/icon.ico`
+   - El instalador NSIS ahora registra la asociación en el sistema operativo
+
+2. **`documents/DOCUMENTACION.md`**:
+   - Actualizado Historial de Versiones con v0.1.4
+   - Actualizada sección de Empaquetado para incluir asociación .md
+   - Actualizada sección File Association con el registro en instalador
+   - Actualizada sección Release en GitHub con el script automatizado
+   - Agregada esta bitácora de la sesión
+
+**Release publicado**:
+- `npm run build:win` → `Marknote-0.1.4-Setup.exe` (118 MB)
+- `npm run release` → tag `v0.1.4` + GitHub Release + artifacts subidos
+- URL: https://github.com/FranzMuhlhauser/marknote/releases/tag/v0.1.4
+
+**Archivos modificados**:
+- `electron-builder.yml`
+- `documents/DOCUMENTACION.md`
