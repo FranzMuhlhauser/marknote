@@ -12,6 +12,10 @@ win:
       arch:
         - x64
   artifactName: ${productName}-${version}-Setup.${ext}
+fileAssociations:
+  - ext: .md
+    description: Markdown
+    icon: resources/icon.ico
 publish:
   provider: github
   owner: FranzMuhlhauser
