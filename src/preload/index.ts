@@ -2,6 +2,7 @@ import { contextBridge, ipcRenderer } from 'electron'
 
 const api = {
   openFile: () => ipcRenderer.invoke('dialog:open'),
+  openCsvFile: () => ipcRenderer.invoke('dialog:openCsv'),
   saveFile: (filePath?: string, content?: string) => ipcRenderer.invoke('dialog:save', { filePath, content }),
   openFolder: () => ipcRenderer.invoke('dialog:openFolder'),
   listFiles: (folderPath: string) => ipcRenderer.invoke('folder:listFiles', folderPath),

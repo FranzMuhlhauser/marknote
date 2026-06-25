@@ -68,7 +68,7 @@ function looksLikeMarkdownTable(lines: string[]): boolean {
 }
 
 function detectDelimiter(lines: string[]): string | null {
-  const delimiters = ['|', '\t', ',']
+  const delimiters: [string, ...string[]] = ['|', '\t', ';', ',']
   const counts = delimiters.map(d =>
     lines.reduce((sum, l) => sum + (l.split(d).length - 1), 0)
   )

@@ -14,6 +14,7 @@ interface MenuBarProps {
   onInstallUpdate: () => void
   onNew: () => void
   onOpen: () => void
+  onImportCsv: () => void
   onSave: () => void
   onSaveAs: () => void
   onExportHtml: () => void
@@ -68,6 +69,7 @@ export function MenuBar(props: MenuBarProps) {
   const archivo: MenuAction[] = [
     { label: 'Nuevo', shortcut: 'Ctrl+N', action: props.onNew },
     { label: 'Abrir', shortcut: 'Ctrl+O', action: props.onOpen },
+    { label: 'Importar CSV...', action: props.onImportCsv },
     { separator: true, label: '' },
     { label: 'Guardar', shortcut: 'Ctrl+S', action: props.onSave },
     { label: 'Guardar Como', shortcut: 'Ctrl+Shift+S', action: props.onSaveAs },

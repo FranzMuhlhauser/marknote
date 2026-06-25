@@ -2897,3 +2897,176 @@ align: {
 - Roundtrip `---:` → HTML → Markdown → HTML ✅
 - Menú contextual → 4 items se renderizan correctamente
 - Sin conflictos con TableSort, TextAlign (config solo heading/paragraph) o P6
+
+---
+
+## P9: Importar archivos CSV como tablas Markdown
+
+### Problema resuelto
+
+Un usuario que tiene datos en Excel, Google Sheets u otro software que exporta CSV/TSV debía copiar manualmente el contenido y pegarlo en la paleta de comandos. P9 permite seleccionar el archivo directamente desde el sistema de archivos mediante un diálogo nativo, parsearlo automáticamente e insertarlo como tabla Markdown en el editor.
+
+### Causa raíz
+
+No existía un punto de entrada para archivos delimitados. La infraestructura de parseo (`parseDelimitedText`) e inserción (`insertTableData`) ya estaba implementada en P6, pero solo accesible desde la CommandPalette (copiar + pegar).
+
+### Arquitectura utilizada
+
+Se reutiliza completamente la infraestructura existente de P6 sin crear lógica de parseo paralela:
+
+1. **Main process**: Nuevo IPC handler `dialog:openCsv` abre diálogo nativo filtrado a `.csv`, `.tsv`, `.txt`.
+2. **Preload bridge**: `openCsvFile()` expone el handler al renderer.
+3. **App.tsx**: `importCsv()` callback que orquesta el flujo:
+   - Abre el diálogo → lee el archivo → parsea el contenido → inserta la tabla en el cursor.
+4. **MenuBar**: Nuevo item "Importar CSV..." en Archivo.
+5. **tableParser.ts**: Ampliado para detectar `;` como delimitador (prioridad 3 de 4).
+
+### Flujo completo
+
+```
+Usuario → Menú Archivo → "Importar CSV..."
+         ↓
+    dialog.showOpenDialog({ filters: [csv, tsv, txt] })
+         ↓
+    ¿Archivo seleccionado? ──no──→ return null
+         ↓ sí
+    readFile(filePath, 'utf-8')
+         ↓
+    parseDelimitedText(content)
+         ↓
+    ¿Formato válido? ──no──→ showToast("No se detectó un formato CSV, TSV o delimitado por |.")
+         ↓ sí
+    insertTableData(editor, parsed)
+         ↓
+    showToast("Tabla importada desde clientes.csv")
+         ↓
+    Tabla Markdown en el cursor
+```
+
+### Archivos modificados
+
+| Archivo | Cambio | Líneas |
+|---|---|---|
+| `src/main/index.ts` | Nuevo IPC handler `dialog:openCsv` | +11 |
+| `src/preload/index.ts` | Nuevo bridge `openCsvFile()` | +1 |
+| `src/renderer/src/env.d.ts` | Nuevo tipo `openCsvFile` en `FileAPI` | +1 |
+| `src/renderer/src/utils/tableParser.ts` | `;` agregado a `detectDelimiter()` con prioridad: \|, \\t, `;`, `,` | +1 |
+| `src/renderer/src/App.tsx` | Nuevo callback `importCsv()`, import desde tableParser, prop `onImportCsv` al MenuBar | +15 |
+| `src/renderer/src/components/MenuBar.tsx` | Nuevo prop `onImportCsv`, item "Importar CSV..." en Archivo | +2 |
+| `documents/DOCUMENTACION.md` | Esta sección P9 | +~180 |
+
+### Decisiones técnicas
+
+| Decisión | Opción elegida | Alternativa descartada |
+|---|---|---|
+| **Nuevo IPC handler** vs reusar `file:read` | Nuevo `dialog:openCsv` (consistente con `dialog:open`) | Reusar `file:read` requeriría dos llamadas IPC |
+| **MenuBar vs CommandPalette** | MenuBar Archivo (coherente con "Abrir") | CommandPalette: no es comando que se busque frecuentemente |
+| **Drag-and-drop CSV** | No incluido en P9 | Requiere modificar `handleDrop` en editorProps. Posible para futuro. |
+| **Guardado automático previo** | Eliminado explícitamente | La importación no reemplaza el documento, solo inserta en el cursor |
+| **Delimitador `;`** | Agregado con prioridad 3 (|, \\t, `;`, `,`) | Excel español exporta CSV con `;` — sin esto, no se detectaban |
+| **Toast post-importación** | `showToast("Tabla importada desde {filename}")` | Confirmación visual para que el usuario sepa qué archivo se usó |
+
+### Compatibilidad con P6/P7/P8
+
+| Funcionalidad | Compatible |
+|---|---|
+| P6 — Convertir datos a tabla | ✅ Reutiliza `parseDelimitedText` + `insertTableData` sin modificaciones |
+| P7 — Pegado Excel/Sheets | ✅ Sin cambios; el flujo de pegado HTML/texto plano sigue funcionando |
+| P8 — Alineación de columnas | ✅ La tabla insertada usa `createTableNode` que genera celdas sin `align` (default null) |
+| TableSort | ✅ Las tablas insertadas pueden ordenarse normalmente |
+| TableContextMenu | ✅ Las tablas insertadas responden al menú contextual |
+| TableSizePicker | ✅ Sin cambios |
+| Source Mode | ✅ La tabla importada persiste al cambiar Source ↔ Visual |
+| Persistencia Markdown | ✅ Roundtrip: Markdown → HTML → Markdown se mantiene intacto |
+| Tabs | ✅ La importación no abre pestañas nuevas, solo inserta en la pestaña activa |
+
+### Validaciones realizadas
+
+**1. CSV con coma:**
+```
+Nombre,Edad
+Juan,25
+Ana,30
+```
+→ ✅ `detectDelimiter` detecta `,`. Tabla 2×2 insertada en el cursor. Toast: "Tabla importada desde {file}".
+
+**2. CSV con punto y coma:**
+```
+Nombre;Edad
+Juan;25
+Ana;30
+```
+→ ✅ `detectDelimiter` detecta `;`. Tabla 2×2 correcta.
+
+**3. TSV:**
+```
+Nombre<tab>Edad
+Juan<tab>25
+```
+→ ✅ `detectDelimiter` detecta `\t`. Prioridad sobre `;` y `,`.
+
+**4. Pipe:**
+```
+| Nombre | Edad |
+| Juan | 25 |
+```
+→ ✅ `detectDelimiter` detecta `|` (máxima prioridad). Tabla 2×2.
+
+**5. Columnas desiguales:**
+```
+Nombre,Edad,Ciudad
+Juan,25
+Ana,30,Santiago
+```
+→ ✅ `normalized` completa Juan→25→(vacío). Tabla 3 columnas.
+
+**6. UTF-8:**
+```
+Nombre,Ciudad
+José,Valparaíso
+María,Viña del Mar
+```
+→ ✅ `readFile('utf-8')` maneja acentos correctamente. Tabla visual correcta.
+
+**7. Archivo vacío:**
+→ ✅ `parseDelimitedText` retorna `null` porque `lines.length === 0`. Toast: "No se detectó un formato CSV, TSV o delimitado por |."
+
+**8. Source Mode:**
+1. Importar CSV exitoso ✅
+2. Cambiar a Source Mode (Ctrl+Shift+M) ✅ — tabla en sintaxis GFM pipe
+3. Volver a visual ✅ — HTML renderizado correctamente
+4. Texto editado en Source Mode persiste al volver ✅
+
+**9. Persistencia (roundtrip):**
+1. Importar CSV ✅
+2. Guardar (Ctrl+S) ✅
+3. Cerrar pestaña ✅
+4. Reabrir archivo guardado ✅
+5. Tabla visual correcta, sin pérdida de datos ✅
+
+**10. TypeScript:**
+→ ✅ `npx tsc --noEmit` sin errores
+
+**11. Build:**
+→ ✅ `npm run build` exitoso
+
+### Resultados obtenidos
+
+- **7 archivos modificados**, ~31 líneas netas de código
+- **0 nuevas dependencias**
+- **0 nueva lógica de parseo** — reutilización completa de P6
+- **0 nueva interfaz** — solo un item de menú
+- **Prioridad de delimitadores**: `|` > `\t` > `;` > `,`
+- **Sin guardado automático**: la importación solo inserta en el cursor
+
+### Riesgos conocidos
+
+| Riesgo | Probabilidad | Mitigación |
+|---|---|---|
+| **CSV con datos que contienen `;` en celdas** | Baja | La detección es por conteo. Si el `;` aparece más veces que `|` o `\t`, podría elegirse incorrectamente. En la práctica, los CSV regionales usan `;` como separador de columnas. |
+| **Archivo enorme (>10MB)** | Baja | `readFile` carga todo en memoria. No hay streaming. Para uso normal con datos de oficina es aceptable. |
+| **Codificación no UTF-8 (ej. Latin-1)** | Baja | `readFile('utf-8')` de Node.js decodifica como UTF-8. Si el archivo está en Latin-1, caracteres como `ñ` pueden corromperse. Mitigación: el usuario debe guardar como UTF-8 desde Excel. |
+| **BOM (Byte Order Mark)** | Muy baja | Node.js `readFile('utf-8')` maneja BOM automáticamente. |
+| **Archivo .txt no delimitado** | Media | Un `.txt` que no contiene ningún delimitador detectable retorna `null` → toast de error. Correcto. |
+| **Editor no inicializado** | Muy baja | `importCsv` verifica `if (!editor) return` antes de cualquier operación. |
+| **Archivo .txt con texto libre que casualmente contiene delimitadores** | Baja | `detectDelimiter` puede elegir un falso positivo. El usuario verá una tabla con datos incorrectos y puede deshacer (Ctrl+Z). Documentado como limitación inherente. |

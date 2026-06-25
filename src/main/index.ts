@@ -109,6 +109,16 @@ ipcMain.handle('dialog:open', async () => {
   return { filePath: result.filePaths[0], content }
 })
 
+ipcMain.handle('dialog:openCsv', async () => {
+  const result = await dialog.showOpenDialog(mainWindow!, {
+    filters: [{ name: 'CSV/TSV', extensions: ['csv', 'tsv', 'txt'] }],
+    properties: ['openFile']
+  })
+  if (result.canceled || result.filePaths.length === 0) return null
+  const content = await readFile(result.filePaths[0], 'utf-8')
+  return { filePath: result.filePaths[0], content }
+})
+
 ipcMain.handle('dialog:save', async (_event, { filePath, content }: { filePath?: string; content: string }) => {
   const path = filePath ?? (await dialog.showSaveDialog(mainWindow!, {
     filters: [{ name: 'Markdown', extensions: ['md'] }],

@@ -19,6 +19,7 @@ import { TableSizePicker } from './components/TableSizePicker'
 import { ConfirmDialog } from './components/ConfirmDialog'
 import { mdToHtml, htmlToMd } from './utils/markdown'
 import { registerTablePicker } from './utils/tablePicker'
+import { parseDelimitedText, insertTableData, showToast } from './utils/tableParser'
 import { getCustomWords, addCustomWord } from './utils/customDictionary'
 import { exportHtml, exportPdf } from './utils/export'
 import { loadTheme, saveTheme, getSystemTheme, resolveTheme, type ThemeId } from './utils/themes'
@@ -418,6 +419,19 @@ function App() {
     loadContent(result.content, result.filePath)
     addRecent(result.filePath)
   }, [activeTab, activeTabId, loadContent, syncEditorToTab, getMarkdown])
+
+  const importCsv = useCallback(async () => {
+    if (!editor) return
+    const result = await window.api.openCsvFile()
+    if (!result) return
+    const parsed = parseDelimitedText(result.content)
+    if (!parsed) {
+      showToast('No se detectó un formato CSV, TSV o delimitado por |.')
+      return
+    }
+    insertTableData(editor, parsed)
+    showToast(`Tabla importada desde ${result.filePath.split(/[/\\]/).pop()}`)
+  }, [editor])
 
   const openFileFromExplorer = useCallback(async (path: string) => {
     if (activeTab?.modified) {
@@ -850,6 +864,7 @@ function App() {
         onInstallUpdate={handleInstallUpdate}
         onNew={newDoc}
         onOpen={openDoc}
+        onImportCsv={importCsv}
         onSave={saveDoc}
         onSaveAs={saveAsDoc}
         onExportHtml={handleExportHtml}
