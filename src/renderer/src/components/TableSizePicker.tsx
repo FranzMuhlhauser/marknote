@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 
 interface TableSizePickerProps {
   position: { x: number; y: number }
@@ -7,13 +7,13 @@ interface TableSizePickerProps {
   onClose: () => void
 }
 
-const MAX_ROWS = 8
-const MAX_COLS = 8
+const MAX_GRID = 8
+const MAX_MANUAL = 20
 const CELL = 18
 const GAP = 2
 const PAD = 8
-const W = MAX_COLS * (CELL + GAP) - GAP + PAD * 2
-const H = MAX_ROWS * (CELL + GAP) - GAP + PAD * 2 + 28
+const W = MAX_GRID * (CELL + GAP) - GAP + PAD * 2
+const H = MAX_GRID * (CELL + GAP) - GAP + PAD * 2 + 32
 
 export function TableSizePicker({ position, defaultSize, onSelect, onClose }: TableSizePickerProps) {
   const [hoveredRows, setHoveredRows] = useState(defaultSize?.rows ?? 1)
@@ -40,8 +40,20 @@ export function TableSizePicker({ position, defaultSize, onSelect, onClose }: Ta
     }
   }, [onClose, onSelect])
 
+  const handleRowsChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const v = parseInt(e.target.value, 10)
+    if (!isNaN(v) && v >= 1) setHoveredRows(Math.min(v, MAX_MANUAL))
+  }, [])
+
+  const handleColsChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const v = parseInt(e.target.value, 10)
+    if (!isNaN(v) && v >= 1) setHoveredCols(Math.min(v, MAX_MANUAL))
+  }, [])
+
   const x = Math.min(position.x, window.innerWidth - W - 8)
   const y = Math.min(position.y, window.innerHeight - H - 8)
+
+  const exceedsGrid = hoveredRows > MAX_GRID || hoveredCols > MAX_GRID
 
   return (
     <div
@@ -53,9 +65,9 @@ export function TableSizePicker({ position, defaultSize, onSelect, onClose }: Ta
         className="table-size-grid"
         onMouseLeave={() => { setHoveredRows(1); setHoveredCols(1) }}
       >
-        {Array.from({ length: MAX_ROWS }, (_, r) => (
+        {Array.from({ length: MAX_GRID }, (_, r) => (
           <div key={r} className="table-size-row">
-            {Array.from({ length: MAX_COLS }, (_, c) => (
+            {Array.from({ length: MAX_GRID }, (_, c) => (
               <div
                 key={c}
                 className={`table-size-cell${r < hoveredRows && c < hoveredCols ? ' active' : ''}`}
@@ -67,7 +79,26 @@ export function TableSizePicker({ position, defaultSize, onSelect, onClose }: Ta
         ))}
       </div>
       <div className="table-size-label">
-        {hoveredRows} × {hoveredCols}
+        <input
+          type="number"
+          className="table-size-input"
+          min={1}
+          max={MAX_MANUAL}
+          value={hoveredRows}
+          onChange={handleRowsChange}
+          onFocus={e => e.target.select()}
+        />
+        <span>×</span>
+        <input
+          type="number"
+          className="table-size-input"
+          min={1}
+          max={MAX_MANUAL}
+          value={hoveredCols}
+          onChange={handleColsChange}
+          onFocus={e => e.target.select()}
+        />
+        {exceedsGrid && <span className="table-size-exceed">+</span>}
       </div>
     </div>
   )

@@ -53,10 +53,50 @@ export function getExtensions() {
         ]
       }
     }).configure({ nested: true }),
-    Table.configure({ resizable: false }),
+    Table,
     TableRow,
-    TableCell,
-    TableHeader,
+    TableCell.extend({
+      addAttributes() {
+        return {
+          ...this.parent?.(),
+          align: {
+            default: null,
+            parseHTML: el => {
+              const ta = el.style.textAlign
+              if (ta && ['left', 'center', 'right'].includes(ta)) return ta
+              const a = el.getAttribute('align')
+              if (a && ['left', 'center', 'right'].includes(a)) return a
+              return null
+            },
+            renderHTML: attrs => {
+              if (!attrs.align) return {}
+              return { style: `text-align: ${attrs.align}` }
+            }
+          }
+        }
+      }
+    }),
+    TableHeader.extend({
+      addAttributes() {
+        return {
+          ...this.parent?.(),
+          align: {
+            default: null,
+            parseHTML: el => {
+              const ta = el.style.textAlign
+              if (ta && ['left', 'center', 'right'].includes(ta)) return ta
+              const a = el.getAttribute('align')
+              if (a && ['left', 'center', 'right'].includes(a)) return a
+              return null
+            },
+            renderHTML: attrs => {
+              if (!attrs.align) return {}
+              return { style: `text-align: ${attrs.align}` }
+            }
+          }
+        }
+      }
+    }),
     Highlight,
     TextAlign.configure({ types: ['heading', 'paragraph'] }),
     CodeBlock.configure({ lowlight }),

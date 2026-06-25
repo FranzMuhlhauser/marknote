@@ -51,6 +51,65 @@ turndown.addRule('mathInline', {
   }
 })
 
+turndown.addRule('table', {
+  filter: 'table',
+  replacement: (_content: string, node: any) => {
+    const rows: string[][] = []
+    const aligns: Record<number, string | null> = {}
+    let numCols = 0
+
+    const thead = node.querySelector('thead')
+    if (thead) {
+      const tr = thead.querySelector('tr')
+      if (tr) {
+        const cells: string[] = []
+        const ths = tr.querySelectorAll('th, td')
+        for (let i = 0; i < ths.length; i++) {
+          cells.push(turndown.turndown(ths[i].innerHTML).replace(/\n/g, ' ').replace(/\|/g, '\\|'))
+          const ta = ths[i].style.textAlign
+          if (ta && ['left', 'center', 'right'].includes(ta)) aligns[i] = ta
+        }
+        if (cells.length) { rows.push(cells); numCols = Math.max(numCols, cells.length) }
+      }
+    }
+
+    const tbody = node.querySelector('tbody')
+    if (tbody) {
+      const trs = tbody.querySelectorAll('tr')
+      for (let i = 0; i < trs.length; i++) {
+        const cells: string[] = []
+        const tds = trs[i].querySelectorAll('td, th')
+        for (let j = 0; j < tds.length; j++) {
+          cells.push(turndown.turndown(tds[j].innerHTML).replace(/\n/g, ' ').replace(/\|/g, '\\|'))
+          if (!(j in aligns)) {
+            const ta = tds[j].style.textAlign
+            if (ta && ['left', 'center', 'right'].includes(ta)) aligns[j] = ta
+          }
+        }
+        if (cells.length) { rows.push(cells); numCols = Math.max(numCols, cells.length) }
+      }
+    }
+
+    if (!numCols) return ''
+
+    const padded = rows.map(r => { while (r.length < numCols) r.push(''); return r })
+    const out: string[] = []
+    out.push('| ' + padded[0].join(' | ') + ' |')
+    const sep = '|' + Array.from({ length: numCols }, (_, i) => {
+      const a = aligns[i]
+      if (a === 'center') return ':---:'
+      if (a === 'right') return '---:'
+      if (a === 'left') return ':---'
+      return '---'
+    }).join('|') + '|'
+    out.push(sep)
+    for (let i = 1; i < padded.length; i++) {
+      out.push('| ' + padded[i].join(' | ') + ' |')
+    }
+    return out.join('\n') + '\n\n'
+  }
+})
+
 function preprocessTaskLists(source: string): string {
   const blocks: string[] = []
   let s = source.replace(/(```[\s\S]*?```|`[^`\n]+`)/g, (m) => {

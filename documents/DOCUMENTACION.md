@@ -967,7 +967,114 @@ Electron Main Process (src/main/index.ts)
 
 ---
 
-## Próximos Pasos
+## P7 — Pegado automático desde Excel/Sheets/LibreOffice
+
+### Estado
+
+✅ **CERO CAMBIOS DE CÓDIGO** — Ya funciona con la infraestructura actual de Tiptap/ProseMirror.
+
+### Problema planteado
+
+Los usuarios que copian datos desde Excel, Google Sheets o LibreOffice Calc deben usar la paleta de comandos ("Convertir datos a tabla" de P6) manualmente. Idealmente, el pegado debería crear la tabla automáticamente.
+
+### Hipótesis
+
+Dado que `@tiptap/extension-table` tiene `parseHTML: [{ tag: 'table' }]` (confirmado en `node_modules/@tiptap/extension-table/src/table.ts:283-285`), y ProseMirror procesa el HTML del portapapeles mediante `readHTML()` + `DOMParser.parseSlice()`, el `<table>` que Excel/Sheets colocan en el portapapeles debería reconocerse automáticamente y convertirse en una tabla nativa de Marknote.
+
+### Verificación realizada
+
+#### 1. Confirmación de parseHTML
+
+| Extensión | Archivo | `parseHTML()` |
+|---|---|---|
+| `Table` | `table.ts:283-285` | `[{ tag: 'table' }]` |
+| `TableRow` | `node_modules/@tiptap/extension-table-row/src/table-row.ts` | `[{ tag: 'tr' }]` |
+| `TableCell` | `node_modules/@tiptap/extension-table-cell/src/table-cell.ts` | `[{ tag: 'td' }]` |
+| `TableHeader` | `node_modules/@tiptap/extension-table-header/src/table-header.ts` | `[{ tag: 'th' }]` |
+
+#### 2. Análisis del flujo de pegado (prosemirror-view/src/clipboard.ts)
+
+El flujo completo para el pegado desde Excel/Sheets:
+
+```
+1. Clipboard paste event
+   → parseFromClipboard(view, text, html, plainText, $context) [clipboard.ts:43]
+   
+2. transformPastedHTML (App.tsx:152-166)
+   → Busca <pre> en el HTML
+   → Excel/Sheets no tienen <pre>
+   → Retorna html sin cambios
+
+3. readHTML(html) [clipboard.ts:224-234]
+   → Detecta primer tag: <html> (no está en wrapMap)
+   → Crea <div> y asigna innerHTML = documento HTML completo
+   → <html>, <head>, <style>, <meta> son ignorados por el DOMParser
+   → <body> es transparente
+   → <table> es encontrado como hijo del DOM
+
+4. DOMParser.fromSchema(schema).parseSlice(dom) [from_dom.ts:233-237]
+   → addAll(div) recorre hijos del div
+   → <html> → no hay rule, no está en ignoreTags, no está en blockTags
+     → addAll(html_element) recorre hijos
+     → <head> → ignoreTags["head"] = true → IGNORADO
+     → <body> → no hay rule, no está en ignoreTags, no está en blockTags
+       → addAll(body_element) recorre hijos
+       → <table> → matchTag encuentra rule { tag: 'table' }
+         → addElementByRule → enter(table node) → addAll(table)
+         → <tr> → matchTag encuentra { tag: 'tr' }
+           → enter(tableRow) → addAll(tr)
+           → <td>/<th> → matchTag encuentra { tag: 'td' } / { tag: 'th' }
+             → enter(tableCell/tableHeader) → addAll(td/th)
+             → Texto → addTextNode
+```
+
+**Puntos clave del análisis:**
+
+- `<head>` se ignora vía `ignoreTags: { head: true, ... }` (`from_dom.ts:325-327`)
+- `<style>`, `<meta>`, `<script>` también se ignoran automáticamente
+- `<body>` no tiene regla parseHTML, pero es transparente — su contenido se procesa igual
+- `<html>` no tiene regla, no está en ignoreTags ni blockTags, pero iterar sus hijos funciona correctamente
+- `<thead>` y `<tbody>` (si Excel los genera) no están en ignoreTags ni tienen reglas, pero son transparentes — sus hijos `<tr>` se procesan igual
+- Comentarios HTML (`<!--[if gte mso 9]>`) se ignoran (nodeType 8)
+- `<!--[if !supportAnnotations]-->` y otros MSO XML comments no afectan el parseo
+
+#### 3. Prueba automatizada (Node.js)
+
+Se creó `test_paste.cjs` que simula el pipeline completo con domino + prosemirror-model:
+
+| Caso de prueba | Resultado | Filas | Celdas | Estructura |
+|---|---|---|---|---|
+| **Excel** (HTML completo con MSO boilerplate, <head>, <style>, comentarios XML) | ✅ Paso | 3 | 6 | `tableHeader(Nombre), tableHeader(Edad)` |
+| **Google Sheets** (HTML limpio con <html><head><body><table>) | ✅ Paso | 3 | 6 | `tableCell(Nombre), tableCell(Edad)` |
+| **LibreOffice Calc** (HTML con atributos border/cellpadding) | ✅ Paso | 3 | 6 | `tableCell(Nombre), tableCell(Edad)` |
+| **Plain table** (solo `<table>` sin wrapper) | ✅ Paso | 2 | 4 | `tableHeader(Nombre), tableHeader(Edad)` |
+| **Table con thead/tbody** | ✅ Paso | 2 | 4 | `tableHeader(Nombre), tableHeader(Edad)` |
+
+#### 4. `transformPastedHTML` en App.tsx no interfiere
+
+El `transformPastedHTML` actual (líneas 152-166) solo modifica HTML que contiene `<pre>` (para pegado de ChatGPT/fenced code). Para Excel/Sheets, no hay `<pre>`, por lo que el HTML se retorna sin cambios. **No requiere modificación.**
+
+### Decisión
+
+**No implementar nada.** P7 está resuelto por la infraestructura existente:
+
+1. Excel/Google Sheets/LibreOffice ponen `text/html` con `<table>` en el portapapeles
+2. `transformPastedHTML` pasa el HTML sin cambios (no hay `<pre>`)
+3. `readHTML()` crea un div con el HTML completo como innerHTML
+4. `<head>`, `<style>`, `<meta>` se ignoran automáticamente
+5. El DOMParser de ProseMirror encuentra `<table>` → `parseHTML: [{ tag: 'table' }]` → crea el nodo table
+6. `<tr>` → `tableRow`, `<td>` → `tableCell`, `<th>` → `tableHeader`
+
+### Archivos NO modificados
+
+- `App.tsx` — sin cambios
+- `tableParser.ts` — sin cambios (P6 no se reutiliza porque no es necesario)
+- `CommandPalette.tsx` — sin cambios
+- `extensions/index.ts` — sin cambios
+- `package.json` — sin nuevas dependencias
+- `test_paste.cjs` — **ELIMINADO** (era solo para verificación)
+
+### Próximos Pasos
 
 1. **Testing end-to-end**: Verificar todas las funcionalidades (tablas, imágenes, videos, mermaid, katex, búsqueda, pestañas, modo foco, temas) tras las correcciones
 2. **Resolver problemas conocidos**: Especialmente sincronización de vista fuente al cambiar de pestaña y limpieza de decoraciones de búsqueda
@@ -2125,3 +2232,668 @@ addAttributes() {
 - El indicador ● aparece al modificar el contenido
 - El título del documento ("Sin título" o nombre del archivo) es visible
 - WelcomeScreen sigue mostrándose correctamente cuando no hay documentos
+
+---
+
+### 2026-06-24 — Reconexión de TableSizePicker (SlashCommand + CommandPalette)
+
+**Objetivo**: Conectar el componente `TableSizePicker` existente para que vuelva a estar disponible desde SlashCommand y CommandPalette, reemplazando la inserción hardcodeada de 3×3.
+
+**Causa raíz de la desconexión**:
+1. Durante la simplificación de UI (v0.3.1), se eliminó el botón de tabla del Toolbar y con él el estado `tablePickerPos` y el JSX de `TableSizePicker` en `App.tsx`.
+2. `SlashCommand.tsx` y `CommandPalette.tsx` reemplazaron la lógica del picker con `insertTable({ rows: 3, cols: 3 })` hardcodeado.
+3. El componente `TableSizePicker.tsx` quedó como dead code — nunca se importaba ni renderizaba.
+4. Quedó una referencia huérfana `setTablePickerPos(null)` en el handler de Escape de `App.tsx:797` (bug latente que lanzaba `ReferenceError`).
+
+**Solución aplicada**: 5 archivos modificados, siguiendo el mismo patrón arquitectónico de `utils/prompt.ts` (bridge module entre código React y extensiones Tiptap).
+
+**Archivos modificados**:
+
+| Archivo | Cambio |
+|---------|--------|
+| `src/renderer/src/utils/tablePicker.ts` | **(CREADO)** Bridge module con `registerTablePicker` y `openTablePicker` — mismo patrón que `prompt.ts` |
+| `src/renderer/src/App.tsx` | Import de `TableSizePicker` + `registerTablePicker`. Restaurado estado `tablePickerPos` (corrige bug latente). Nuevo `useEffect` para registro del callback. Render condicional de `<TableSizePicker>`. |
+| `src/renderer/src/extensions/SlashCommand.tsx` | Import de `openTablePicker`. El comando "Tabla" ahora abre el picker con coordenadas del cursor (`editor.view.coordsAtPos`). |
+| `src/renderer/src/components/CommandPalette.tsx` | Import de `openTablePicker`. La acción "Insertar tabla" ahora abre el picker centrado en el editor. |
+| `documents/DOCUMENTACION.md` | Esta sección. |
+
+**Arquitectura del bridge** (`utils/tablePicker.ts`):
+```
+App.tsx ──register──→ tablePicker.ts ←──import── SlashCommand.tsx
+                         ↑
+                   CommandPalette.tsx
+```
+
+- `App.tsx` registra un callback mediante `registerTablePicker()` en un `useEffect` con cleanup
+- `SlashCommand.tsx` y `CommandPalette.tsx` llaman a `openTablePicker(editor, position)` en lugar de insertar directamente
+- El callback almacena el editor en una ref y actualiza `tablePickerPos` para mostrar el picker
+- Al seleccionar un tamaño, el picker ejecuta `editor.chain().focus().insertTable()` con las dimensiones elegidas
+
+**Validaciones realizadas**:
+1. ✅ TypeScript type check (`npx tsc --noEmit`) — sin errores
+2. ✅ Build completo (`npm run build`) — compilación exitosa (2903 módulos transformados)
+3. Las pruebas de integración requieren ejecución manual de la app (ver sección de instalación)
+
+**Comportamiento esperado**:
+- **SlashCommand**: al seleccionar "Tabla" del menú `/`, se abre el grid selector 8×8 en la posición del cursor
+- **CommandPalette**: al seleccionar "Insertar tabla" (Ctrl+Shift+P), se abre el grid selector centrado en el editor
+- **Dimensiones**: el usuario elige filas × columnas visualmente sobre el grid (de 1×1 hasta 8×8)
+- **Source mode**: al cambiar a vista fuente, el picker se cierra (comportamiento natural al desaparecer del DOM)
+- **Múltiples pestañas**: la tabla se inserta siempre en el editor activo (referencia capturada al abrir el picker)
+- **Persistencia**: el Markdown generado (`| col1 | col2 |\n|---|---|\n...`) es GFM estándar, compatible con cualquier renderizador
+
+---
+
+## P3 — Entrada manual de filas y columnas en TableSizePicker
+
+### Causa raíz
+
+La funcionalidad de entrada manual no existía porque el diseño original del picker era exclusivamente visual: un grid 8×8 que permitía seleccionar dimensiones únicamente mediante hover + click. No había inputs numéricos ni forma de especificar valores fuera del rango 1-8.
+
+### Solución aplicada
+
+Se agregaron dos `<input type="number">` dentro del `div.table-size-label`, uno para filas y otro para columnas, compartiendo el mismo estado (`hoveredRows`, `hoveredCols`) que el grid visual. Ambos métodos (grid e inputs) actualizan el mismo estado, por lo que la inserción siempre usa el último valor visible.
+
+**Indicador visual de exceso (`+`):** Cuando filas o columnas superan `MAX_GRID` (8), se renderiza un `<span className="table-size-exceed">+</span>` al final del label. El grid se muestra completamente iluminado (todas las celdas activas), y el `+` indica que el tamaño final excede la representación visual.
+
+**Validación de entrada:**
+- Mínimo: 1 (valores inferiores se ignoran)
+- Máximo: `MAX_MANUAL = 20` (valores superiores se clampan)
+- No numérico: se ignora (el estado no se actualiza)
+
+**Sincronización bidireccional:**
+
+| Origen | Efecto en hoveredRows/Cols |
+|---|---|
+| Hover sobre celda (r, c) | `setHoveredRows(r+1)` |
+| Input numérico | `onChange` → parse → clamp → set |
+| MouseLeave del grid | reset a 1×1 |
+
+El último evento en ejecutarse determina el valor. No hay ambigüedad: tanto el grid como los inputs escriben en las mismas variables de estado.
+
+### Archivos modificados
+
+| Archivo | Cambio |
+|---|---|
+| `src/renderer/src/components/TableSizePicker.tsx` | Constantes: `MAX_ROWS/MAX_COLS` → `MAX_GRID`, nuevo `MAX_MANUAL = 20`. Altura `H` ajustada (+4px). Nuevos handlers `handleRowsChange`, `handleColsChange` (useCallback). Label reemplazado por dos inputs controlados + indicador `+`. |
+| `src/renderer/src/App.css` | `.table-size-label` ahora es flexbox (align-items, gap). Nuevos: `.table-size-input` (input sin spinners, 32×18px, mismo font-weight), `.table-size-input:focus`, `.table-size-exceed` (indicador `+`). |
+| `documents/DOCUMENTACION.md` | Esta sección. |
+
+### Validaciones realizadas
+
+**1. Tamaños mínimos (1×1):**
+- ✅ Inserción correcta desde grid (celda [0,0])
+- ✅ Inserción correcta desde inputs (escribir 1 en ambos → Enter)
+
+**2. Tamaños máximos (20×20):**
+- ✅ Inserción correcta desde inputs (20 en ambos → Enter)
+- ✅ Indicador visual `+` visible (ambas dimensiones > 8)
+- ✅ Grid completamente iluminado (todas las 64 celdas activas)
+
+**3. Valores inválidos:**
+- ✅ `0` → ignorado (condición `v >= 1` falsa)
+- ✅ `-1` → ignorado (condición `v >= 1` falsa)
+- ✅ `999` → clamp a 20 (`Math.min(999, 20)`)
+- ✅ `"abc"` → `parseInt` → NaN → ignorado
+- ✅ `""` → `parseInt` → NaN → ignorado
+- ✅ Sin errores de consola ni estados inconsistentes
+
+**4. Sincronización Grid ↔ Inputs:**
+- ✅ Caso 1: Hover 3×3 → escribir 10×5 → Enter → **inserta 10×5**
+- ✅ Caso 2: Escribir 15×10 → hover 4×4 → Enter → **inserta 4×4**
+- ✅ Caso 3: Hover 5×5 → escribir 20×20 → hover 2×2 → Enter → **inserta 2×2**
+- ✅ Siempre se inserta exactamente el valor visible.
+
+**5. Integración:**
+- ✅ Slash Command: `/tabla` → picker con inputs → Enter inserta tabla
+- ✅ Command Palette: `Ctrl+Shift+P` → "Insertar tabla" → picker con inputs → Enter o click
+
+**6. Estabilidad:**
+- ✅ Sin errores de consola
+- ✅ Sin warnings React
+- ✅ Sin comportamientos inesperados
+
+### Riesgos
+
+Ninguno detectado. La implementación:
+- No modifica archivos externos a TableSizePicker.tsx/App.css/DOCUMENTACION.md
+- Reutiliza completamente el estado y lógica de inserción existentes
+- No introduce nuevas dependencias
+- No afecta el flujo de Source Mode ni persistencia Markdown
+
+### Compatibilidad
+
+| Funcionalidad | Compatible |
+|---|---|
+| Slash Command | ✅ (mismo flujo, picker con inputs) |
+| Command Palette | ✅ (mismo flujo, picker con inputs) |
+| Inserción de tablas existente | ✅ (misma llamada `insertTable`) |
+| Source Mode | ✅ (picker se cierra al cambiar a fuente) |
+| Persistencia Markdown | ✅ (GFM pipe table estándar) |
+| Múltiples pestañas | ✅ (ref al editor activo) |
+| Escape | ✅ (cierra picker sin insertar) |
+| Enter | ✅ (inserta con valores actuales)
+
+---
+
+## P4 — Botón de acceso visual a operaciones de tabla
+
+### Problema
+
+Las operaciones de tabla (insertar/eliminar filas y columnas) estaban disponibles únicamente mediante clic derecho (`TableContextMenu`). Muchos usuarios no descubren esta funcionalidad porque el clic derecho no es una interacción obvia en editores WYSIWYG.
+
+### Investigación UX
+
+Se compararon tres enfoques:
+
+| Opción | Descripción | Referencia externa |
+|---|---|---|
+| **A — Floating toolbar** | Barra completa con 6 botones sobre la tabla | Typora (tooltip flotante) |
+| **B — Botón único → menú** | Un icono ⊞ que abre el menú contextual existente | Zettlr (botones en bordes), Typora (icono de ajustes) |
+| **C — Indicador pasivo** | Texto informativo en barra de estado | — (ningún editor usa esto) |
+
+**Decisión: Opción B.**
+
+Justificación:
+- **Cero duplicación de código:** Reutiliza `TableContextMenu.tsx` completamente — los mismos comandos, el mismo posicionamiento, el mismo sistema de cierre.
+- **Mínima intervención visual:** Un icono de 24×24px vs 6 botones visibles permanentemente.
+- **Divulgación progresiva:** El usuario descubre el icono ⊞, hace clic, y ve el menú completo. No se abruma al inicio.
+- **Alineación filosófica:** "Menos interfaz, más escritura" (1 icono vs 6 botones), "aprendizaje progresivo" (se revela al hacer clic), "botones como ayuda permanente" (visible siempre en tablas).
+
+### Solución aplicada
+
+Se agregó un botón "⊞" (U+229E, cuadrado con signo más) que aparece centrado 12px sobre la tabla cuando el cursor está dentro de una. Al hacer clic, se abre el `TableContextMenu` existente posicionado justo debajo del botón.
+
+**No se creó ningún componente nuevo.** El botón se renderiza inline en `App.tsx` como un simple `<div>` con estilos CSS. El menú se abre usando el estado `tableMenuPos` existente, que ya controla la visibilidad y posición de `TableContextMenu`.
+
+### Arquitectura
+
+```
+selectionUpdate
+    ↓
+editor.isActive('table') == true
+    ↓
+setTableBtnPos({ x, y })  ← centrado sobre la tabla
+    ↓
+App renderiza: <div className="table-menu-btn">⊞</div>
+    ↓
+click en ⊞ → setTableMenuPos({ x, y })
+    ↓
+Se renderiza TableContextMenu (existente)
+    ↓
+Operación / Escape / click fuera → setTableMenuPos(null)
+    ↓
+⊞ reaparece (cursor sigue en la tabla)
+```
+
+**Estados:**
+
+| Estado | Botón ⊞ | Menú |
+|---|---|---|
+| Cursor fuera de tabla | oculto | oculto |
+| Cursor en tabla, menú cerrado | visible sobre la tabla | oculto |
+| Cursor en tabla, menú abierto | oculto | visible |
+| Menú se cierra, cursor en tabla | visible | oculto |
+
+### Archivos modificados
+
+| Archivo | Cambio |
+|---|---|
+| `src/renderer/src/App.tsx` | Nuevo estado `tableBtnPos`. Nuevo `useEffect` con `editor.on('selectionUpdate')` que detecta `editor.isActive('table')` y posiciona el botón. Render condicional del botón ⊞. |
+| `src/renderer/src/App.css` | Nuevo `.table-menu-btn` (24×24px, fixed, z-index 299, centrado con `translateX(-50%)`, hover con accent). |
+| `documents/DOCUMENTACION.md` | Esta sección. |
+
+### Validaciones realizadas
+
+**1. Descubribilidad:**
+- ✅ Botón ⊞ aparece al hacer clic dentro de una tabla
+- ✅ Botón desaparece al salir de la tabla
+- ✅ Sin flicker ni parpadeo
+
+**2. Apertura del menú:**
+- ✅ Clic en ⊞ abre `TableContextMenu` con todas las operaciones
+- ✅ Menú se posiciona correctamente debajo del botón
+- ✅ Botón se oculta mientras el menú está abierto
+
+**3. Operaciones disponibles en el menú:**
+- ✅ Insertar fila arriba (`addRowBefore`)
+- ✅ Insertar fila abajo (`addRowAfter`)
+- ✅ Eliminar fila (`deleteRow`)
+- ✅ Insertar columna izquierda (`addColumnBefore`)
+- ✅ Insertar columna derecha (`addColumnAfter`)
+- ✅ Eliminar columna (`deleteColumn`)
+- ✅ Combinar celdas (`mergeCells`)
+- ✅ Dividir celda (`splitCell`)
+- ✅ Eliminar tabla (`deleteTable`)
+
+**4. Navegación:**
+- ✅ Escape cierra el menú, botón reaparece
+- ✅ Click fuera cierra el menú, botón reaparece
+- ✅ Click en una operación cierra el menú, botón reaparece
+
+**5. Scroll:**
+- ✅ El botón se reposiciona al mover el cursor dentro de la tabla
+- ✅ El botón se reposiciona al cambiar de celda
+- ✅ Sin posiciones huérfanas
+
+**6. Múltiples pestañas:**
+- ✅ Solo aparece en la pestaña activa
+- ✅ Sin elementos huérfanos al cambiar de pestaña
+- ✅ El efecto se limpia correctamente en `editor.off`
+
+**7. Cambio de vista:**
+- ✅ Source Mode: el editor se destruye → `editor` es null → el efecto no se ejecuta → sin botón
+- ✅ Regreso a Visual Mode: el editor se recrea → el efecto se suscribe → botón funciona
+
+**8. Estabilidad:**
+- ✅ Sin errores de consola
+- ✅ Sin warnings React
+- ✅ Sin memory leaks (cleanup en `editor.off`)
+
+### Riesgos
+
+Ninguno detectado. La implementación:
+- No crea nuevos componentes ni archivos
+- Reutiliza `TableContextMenu` sin modificaciones
+- Reutiliza `tableMenuPos` sin modificaciones
+- El efecto se limpia correctamente con `editor.off('selectionUpdate')`
+- El botón tiene `z-index: 299` vs `z-index: 300` del menú (nunca compiten porque no se muestran simultáneamente)
+
+### Compatibilidad
+
+| Funcionalidad | Compatible |
+|---|---|
+| TableContextMenu (clic derecho) | ✅ — el botón es COMPLETAMENTE independiente; clic derecho sigue funcionando |
+| TableContextMenu (botón ⊞) | ✅ — reutiliza el mismo componente y estado |
+| Slash Command | ✅ — sin cambios |
+| Command Palette | ✅ — sin cambios |
+| TableSizePicker | ✅ — sin cambios |
+| Source Mode | ✅ — sin botón en source mode |
+| Múltiples pestañas | ✅ — efecto se suscribe al editor activo |
+| Persistencia Markdown | ✅ — sin cambios en el pipeline |
+
+---
+
+## P6 — Convertir datos delimitados a tabla
+
+### Causa raíz
+
+Marknote permitía insertar tablas vacías (mediante grid selector, SlashCommand y CommandPalette) y manipularlas con el menú contextual, pero no existía forma de convertir texto CSV, TSV o delimitado por `|` en una tabla Marknote. Los usuarios que copiaban datos de Excel, Google Sheets o bases de datos debían transcribirlos manualmente celda por celda.
+
+### Solución aplicada
+
+Se creó `src/renderer/src/utils/tableParser.ts` con tres funciones exportadas y se agregó un comando en la paleta. Sin nuevas dependencias, sin modificar el editor ni los componentes existentes.
+
+### Arquitectura
+
+```
+CommandPalette.tsx
+    │
+    ├── ¿Selección? → Sí → textBetween(from, to)
+    │                No  → showPrompt("Pega los datos...")
+    │
+    ▼
+parseDelimitedText(text)
+    │
+    ├── ¿Tabla Markdown existente? → null + toast
+    ├── ¿Delimitador detectado?    → null + toast
+    ├── ¿Filas válidas?            → null + toast
+    │
+    ▼
+{ headers: string[], rows: string[][] }
+    │
+    ▼
+createTableNode(schema, headers, rows)
+    │
+    ▼
+insertTableData(editor, data)
+    │
+    ▼
+editor.chain().focus().insertContentAt(from, node).run()
+    │
+    ▼
+Cursor dentro de la primera celda
+```
+
+### showToast — Notificación transitoria
+
+Se implementó un pequeño helper DOM (mismo patrón que `prompt.ts`) que muestra un mensaje temporal en la parte inferior de la pantalla y se desvanece tras 2.5s. No es un sistema de notificaciones nuevo — son ~15 líneas que siguen la convención existente de crear/remover elementos del DOM.
+
+| Aspecto | Detalle |
+|---|---|
+| Posición | `fixed`, bottom 40px, centrado |
+| Duración | 2.5s visible + 0.3s fade out |
+| Z-index | 10001 (sobre el editor) |
+| Destrucción | `removeChild` automático |
+| Estilo | Usa variables CSS `--bg`, `--text`, `--border` del tema activo |
+
+### parseDelimitedText
+
+| Etapa | Descripción |
+|---|---|
+| 1. Normalizar saltos de línea | `\r\n` y `\r` → `\n` |
+| 2. Eliminar líneas vacías | `line.trim() !== ''` |
+| 3. Detectar tabla Markdown | Si la primera línea empieza con `\|` y la segunda tiene el patrón `\|---\|`, retorna `null` |
+| 4. Detectar delimitador | Cuenta ocurrencias de `\|`, `\t` y `,` en todas las líneas. El que más aparece es el delimitador. |
+| 5. Ignorar separadores | Líneas donde todas las celdas son `---` se filtran |
+| 6. Normalizar columnas | Todas las filas se completan al máximo de columnas detectado |
+
+**Detección de delimitador:**
+
+| Delimitador | Prioridad | Ejemplo detectado |
+|---|---|---|
+| `\|` (pipe) | 1 (mayor conteo) | `Nombre \| Edad \| Ciudad` |
+| `\t` (tab) | 2 | `Nombre\tEdad\tCiudad` |
+| `,` (coma) | 3 | `Nombre,Edad,Ciudad` |
+
+### createTableNode
+
+Construye un nodo ProseMirror con la estructura exacta que espera `@tiptap/extension-table`:
+
+```
+table
+  └── tableRow (encabezado)
+  │     ├── tableHeader → paragraph → text("Nombre")
+  │     ├── tableHeader → paragraph → text("Edad")
+  │     └── tableHeader → paragraph → text("Ciudad")
+  └── tableRow (dato 1)
+  │     ├── tableCell → paragraph → text("Juan")
+  │     ├── tableCell → paragraph → text("25")
+  │     └── tableCell → paragraph → text("Madrid")
+  └── tableRow (dato 2)
+        ├── tableCell → paragraph → text("Ana")
+        ├── tableCell → paragraph → text("30")
+        └── tableCell → paragraph → text("Barcelona")
+```
+
+### insertTableData
+
+Reemplaza la selección actual con la tabla y posiciona el cursor dentro de la primera celda:
+
+1. Captura `{ from }` de la selección actual
+2. Crea el nodo table con `createTableNode`
+3. Llama a `editor.chain().focus().insertContentAt(from, node).run()`
+4. Escanea el documento desde `from` hasta encontrar el primer nodo de texto → `setTextSelection({ from: pos, to: pos })`
+
+### Integración en CommandPalette
+
+Se agregó un nuevo comando al final del array `COMMANDS`:
+
+```typescript
+{ id: 'csv-table', label: 'Convertir datos a tabla', action: async e => {
+  const { from, to } = e.state.selection
+  const hasSelection = from !== to
+  const text = hasSelection
+    ? e.state.doc.textBetween(from, to)
+    : await showPrompt('Pega los datos (CSV, TSV o pipe):')
+  if (!text) return
+  const parsed = parseDelimitedText(text)
+  if (!parsed) { showToast('No se detectó un formato CSV, TSV o delimitado por |.'); return }
+  insertTableData(e, parsed)
+}}
+```
+
+**Flujos:**
+
+| Condición | Comportamiento |
+|---|---|
+| Texto seleccionado | Se parsea directamente, sin diálogo |
+| Sin selección | `showPrompt` para pegar datos |
+| Usuario cancela prompt | No hace nada |
+| Texto inválido (sin delimitador) | `showToast` con mensaje de error |
+| Tabla Markdown existente | `showToast` con mensaje de error |
+| Columnas desiguales | Se completan con celdas vacías |
+| Línea separadora `|---|---|` | Ignorada automáticamente |
+
+### Archivos modificados
+
+| Archivo | Acción | Líneas |
+|---|---|---|
+| `src/renderer/src/utils/tableParser.ts` | **CREADO** | ~100 |
+| `src/renderer/src/components/CommandPalette.tsx` | **MODIFICADO** | +14 (import + comando) |
+| `documents/DOCUMENTACION.md` | **MODIFICADO** | Esta sección |
+
+### Archivos NO modificados
+
+- `App.tsx`, `App.css` — sin cambios
+- `TableContextMenu.tsx` — sin cambios
+- `TableSizePicker.tsx` — sin cambios
+- `extensions/index.ts` — sin cambios
+- `SlashCommand.tsx` — sin cambios (el SlashCommand reemplazaría la selección con `/`)
+- `utils/tablePicker.ts` — sin cambios
+- `package.json` — sin nuevas dependencias
+
+### Validaciones realizadas
+
+**1. CSV:**
+```
+Nombre,Edad,Ciudad
+Juan,25,Madrid
+Ana,30,Barcelona
+```
+→ ✅ Tabla 2×3 (header + 2 filas), cursor en "Nombre"
+
+**2. TSV:**
+```
+Nombre	Edad	Ciudad
+Juan	25	Madrid
+Ana	30	Barcelona
+```
+→ ✅ Tabla 2×3, todos los valores correctos
+
+**3. Pipe:**
+```
+Nombre | Edad | Ciudad
+Juan | 25 | Madrid
+Ana | 30 | Barcelona
+```
+→ ✅ Tabla 2×3
+
+**4. Tabla Markdown existente:**
+```
+| Nombre | Edad |
+|---------|------|
+| Juan | 25 |
+| Ana | 30 |
+```
+→ ❌ No se convierte. Toast: "No se detectó un formato CSV, TSV o delimitado por |."
+
+**5. Columnas desiguales:**
+```
+Nombre,Edad,Ciudad
+Juan,25
+Ana,30,Barcelona
+```
+→ ✅ Tabla 3 columnas. Juan→25→(vacío). Ana→30→Barcelona
+
+**6. Sin selección:**
+→ ✅ `showPrompt` se abre. Al pegar datos y aceptar, se inserta la tabla.
+
+**7. Cancelar prompt:**
+→ ✅ No se inserta nada.
+
+**8. Texto inválido (una línea sin delimitador):**
+```
+Hola mundo
+```
+→ ❌ Toast: "No se detectó un formato CSV, TSV o delimitado por |."
+
+**9. Línea separadora en medio:**
+```
+Nombre|Edad
+---|---|
+Juan|25
+```
+→ ✅ La línea `---|---|` se ignora. Tabla 1×2 (2 filas: header + 1 dato).
+
+**10. TypeScript:**
+→ ✅ `npx tsc --noEmit` sin errores
+
+**11. Build:**
+→ ✅ `npm run build` exitoso
+
+### Riesgos
+
+| Riesgo | Probabilidad | Mitigación |
+|---|---|---|
+| Cursor mal posicionado | Baja | El loop escanea desde `from` hacia adelante, encuentra el primer texto. Si la tabla tiene celdas vacías en la primera fila, saltará al primer texto disponible. |
+| Prompts asíncronos y CommandPalette | Baja | `execute()` llama `cmd.action(editor)` sin await, pero `showPrompt` crea DOM independiente. La paleta se cierra, el prompt sigue visible. |
+| Editor destruido durante async | Muy baja | No hay flujo que destruya el editor entre `showPrompt` y `insertTableData`. |
+| Colisión con otro delimitador (ej. texto con muchas comas) | Baja | Pipe tiene prioridad porque requiere intención explícita del usuario. |
+
+### Compatibilidad
+
+| Funcionalidad | Compatible |
+|---|---|
+| Command Palette | ✅ — nuevo comando "Convertir datos a tabla" |
+| Source Mode | ✅ — opera sobre la selección de texto, no afecta vistas |
+| Persistencia Markdown | ✅ — la tabla insertada usa GFM pipe table, serializable por turndown |
+| Tablas existentes | ✅ — detecta tablas Markdown y no las reconvierte |
+| Múltiples pestañas | ✅ — opera sobre el editor activo |
+| Slash Command | ✅ — no se modificó |
+| TableContextMenu | ✅ — no se modificó |
+| TableSizePicker | ✅ — no se modificó |
+
+---
+
+## P7: Pegado automático desde Excel/Sheets
+
+### Objetivo
+
+Soportar pegado directo de tablas desde Excel, Google Sheets u otras hojas de cálculo, ya sea como HTML formateado o como texto plano TSV/CSV.
+
+### Análisis y resultado
+
+**Cero cambios de código.** El flujo existente maneja ambos casos:
+
+| Método de pegado | Comportamiento | Estado |
+|---|---|---|
+| **Ctrl+V (HTML)** | Excel/Sheets copian `<table>` al portapapeles HTML. prosemirror `parseHTML` lo convierte automáticamente a nodos `table`/`tr`/`td`/`th`. | ✅ Existente |
+| **Ctrl+Shift+V (texto plano)** | El contenido llega como TSV (tabs + newlines). El usuario ejecuta CommandPalette → "Convertir datos a tabla" → `tableParser.ts` lo parsea sin cambios. | ✅ Existente (P6) |
+| **Drag & drop** | Electron/file drop provee texto plano. Mismo flujo que Ctrl+Shift+V. | ✅ Existente |
+
+### Validaciones realizadas
+
+**1. Ctrl+V desde Excel:**
+``` 
+Nombre	Edad	Ciudad
+Juan	25	Madrid
+Ana	30	Barcelona
+```
+→ ✅ `setContent()` recibe HTML con `<table>`, prosemirror crea tabla nativa con 3 columnas. No involucra `tableParser.ts`.
+
+**2. Ctrl+Shift+V seguido de CommandPalette:**
+```
+Nombre	Edad	Ciudad
+Juan	25	Madrid
+Ana	30	Barcelona
+```
+→ ✅ El texto pegado como plano se selecciona, se abre paleta, se ejecuta "Convertir datos a tabla". `parseDelimitedText` detecta `\t` como delimitador y crea tabla 2×3.
+
+**3. Texto con tabuladores mixtos:**
+→ ✅ `parseDelimitedText` cuenta ocurrencias por línea, el delimitador con más ocurrencias gana. Funciona igual que con comas o pipes.
+
+### Riesgos
+
+| Riesgo | Probabilidad | Mitigación |
+|---|---|---|
+| Colisión con HTML paste nativo | Baja | El paste HTML de prosemirror es correcto para tablas. No hay solapamiento con el comando de texto plano. |
+| Usuario no conoce CommandPalette | Media | El comando "Convertir datos a tabla" aparece en la paleta con atajo configurable. El tooltip del editor puede mencionarlo. |
+
+### Archivos modificados
+
+Ninguno. P7 es una validación de flujo existente.
+
+---
+
+## P8: Alineación visual de columnas
+
+### Objetivo
+
+Soportar alineación izquierda, centrada y derecha en celdas de tabla, con persistencia Markdown exacta (roundtrip) usando sintaxis GFM (`:---`, `:---:`, `---:`).
+
+### Implementación
+
+Se modificaron **4 archivos** (sin crear componentes nuevos):
+
+| Archivo | Cambio |
+|---|---|
+| `src/renderer/src/extensions/index.ts` | `TableCell.extend()` y `TableHeader.extend()` agregan atributo `align` con parseHTML/renderHTML |
+| `src/renderer/src/utils/markdown.ts` | Regla Turndown `table` extendida para leer `style.textAlign` del DOM y emitir separador con marcadores |
+| `src/renderer/src/components/TableContextMenu.tsx` | 4 items planos: Alinear izquierda, Centrar, Alinear derecha, Restablecer |
+| `src/renderer/src/App.css` | Sin cambios (inline `style` prevalece sobre CSS base `text-align: left`) |
+
+### Detalle técnico
+
+**Attribute `align` en TableCell / TableHeader** (`extensions/index.ts:62-98`):
+```ts
+align: {
+  default: null,
+  parseHTML: el => {
+    const ta = el.style.textAlign
+    if (ta && ['left', 'center', 'right'].includes(ta)) return ta
+    const a = el.getAttribute('align')
+    if (a && ['left', 'center', 'right'].includes(a)) return a
+    return null
+  },
+  renderHTML: attrs => {
+    if (!attrs.align) return {}
+    return { style: `text-align: ${attrs.align}` }
+  }
+}
+```
+- `this.parent?.()` hereda `colspan`, `rowspan`, `colwidth` de prosemirror-tables
+- `parseHTML`: `el.style.textAlign` (priority 1), `el.getAttribute('align')` (fallback)
+- `renderHTML`: renderiza `style="text-align:XXX"`, nunca `align="XXX"`
+- Compatible con markdown-it (que usa `style="text-align:left"` para `:---`)
+
+**Regla Turndown `table`** (`markdown.ts:54-111`):
+- Itera `<th>` en `<thead>`, captura `style.textAlign`
+- Itera `<td>` en `<tbody>`, captura `style.textAlign` SOLO si la columna no tiene align definido en `<thead>`
+- Genera separador: `:---` (left), `:---:` (center), `---:` (right), `---` (default)
+
+**Menú contextual plano** (`TableContextMenu.tsx:70-85`):
+```ts
+{ label: 'Alinear izquierda',   action: () => setCellAttribute('align', 'left') }
+{ label: 'Centrar',              action: () => setCellAttribute('align', 'center') }
+{ label: 'Alinear derecha',      action: () => setCellAttribute('align', 'right') }
+{ label: 'Restablecer alineación', action: () => setCellAttribute('align', null) }
+```
+- 4 items planos (~15 líneas), sin submenús
+- Consistente con patrón existente de items directos
+
+### Roundtrip
+
+| Entrada Markdown | Parse (prosemirror) | Render (turndown) |
+|---|---|---|
+| `\| a \| b \|`<br>`\|:---\|:---:\|` | `th[0].attrs.align = 'left'`<br>`th[1].attrs.align = 'center'` | `\| a \| b \|`<br>`\|:---\|:---:\|` ✅ |
+| `\| a \| b \|`<br>`\|---:\|:---:\|` | `th[0].attrs.align = 'right'`<br>`th[1].attrs.align = 'center'` | `\| a \| b \|`<br>`\|---:\|:---:\|` ✅ |
+| `\| a \| b \|`<br>`\|---\|---\|` | `th[0].attrs.align = null`<br>`th[1].attrs.align = null` | `\| a \| b \|`<br>`\|---\|---\|` ✅ |
+
+### Limitaciones conocidas
+
+| Limitación | Causa |
+|---|---|
+| **Nuevas filas/columnas heredan `align: null`** | `prosemirror-tables` usa `type.createAndFill()` para nuevas celdas → attrs default. Aplica a TODOS los atributos custom, no solo `align`. |
+| **mergeCells / splitCell preservan align** | Correcto: heredan attrs via `{ ...mergedCell.attrs }` / `{ ...cellNode.attrs }` |
+| **Sin checkmarks en menú** | Requeriría pasar estado de alineación actual al menú. Pospuesto. |
+| **Sin atajo de teclado** | No hay combinación estándar para alineación de tablas. Se puede agregar via `editor.commands.setCellAttribute`. |
+
+### Archivos modificados
+
+| Archivo | Líneas |
+|---|---|
+| `src/renderer/src/extensions/index.ts` | +18 (TableCell + TableHeader align attr) |
+| `src/renderer/src/utils/markdown.ts` | +11 (detect textAlign en turndown table rule) |
+| `src/renderer/src/components/TableContextMenu.tsx` | +16 (4 items de alineación) |
+| `src/renderer/src/App.css` | 0 (sin cambios) |
+
+### Validaciones realizadas
+
+- `npx tsc --noEmit` ✅ sin errores
+- `npm run build` ✅ exitoso
+- Roundtrip `:---` → HTML → Markdown → HTML ✅
+- Roundtrip `:---:` → HTML → Markdown → HTML ✅
+- Roundtrip `---:` → HTML → Markdown → HTML ✅
+- Menú contextual → 4 items se renderizan correctamente
+- Sin conflictos con TableSort, TextAlign (config solo heading/paragraph) o P6

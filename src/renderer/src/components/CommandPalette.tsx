@@ -1,6 +1,8 @@
 import { useState, useCallback, useEffect, useRef } from 'react'
 import type { Editor } from '@tiptap/core'
 import { showPrompt } from '../utils/prompt'
+import { openTablePicker } from '../utils/tablePicker'
+import { parseDelimitedText, insertTableData, showToast } from '../utils/tableParser'
 
 interface Cmd {
   id: string
@@ -22,7 +24,12 @@ const COMMANDS: Cmd[] = [
   { id: 'task', label: 'Lista de tareas', action: e => e.chain().focus().toggleTaskList().run() },
   { id: 'quote', label: 'Cita', action: e => e.chain().focus().toggleBlockquote().run() },
   { id: 'code', label: 'Bloque de código', action: e => e.chain().focus().toggleCodeBlock().run() },
-  { id: 'table', label: 'Insertar tabla', action: e => e.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run() },
+  { id: 'table', label: 'Insertar tabla', action: e => {
+    const rect = document.querySelector('.ProseMirror')?.getBoundingClientRect()
+    const x = rect ? rect.left + rect.width / 2 : window.innerWidth / 2
+    const y = rect ? rect.top + rect.height / 3 : window.innerHeight / 3
+    openTablePicker(e, { x, y })
+  } },
   { id: 'math-inline', label: 'Fórmula en línea', action: e => e.chain().focus().insertContent({ type: 'mathInline', attrs: { tex: '' } }).run() },
   { id: 'math-block', label: 'Bloque de fórmula', action: e => e.chain().focus().insertContent({ type: 'mathBlock', attrs: { tex: '' } }).run() },
   { id: 'mermaid', label: 'Diagrama Mermaid', action: e => e.chain().focus().insertContent({ type: 'mermaidBlock', attrs: { code: '' } }).run() },
@@ -39,6 +46,17 @@ const COMMANDS: Cmd[] = [
       reader.readAsDataURL(file)
     }
     input.click()
+  }},
+  { id: 'csv-table', label: 'Convertir datos a tabla', action: async e => {
+    const { from, to } = e.state.selection
+    const hasSelection = from !== to
+    const text = hasSelection
+      ? e.state.doc.textBetween(from, to)
+      : await showPrompt('Pega los datos (CSV, TSV o pipe):')
+    if (!text) return
+    const parsed = parseDelimitedText(text)
+    if (!parsed) { showToast('No se detectó un formato CSV, TSV o delimitado por |.'); return }
+    insertTableData(e, parsed)
   }},
 ]
 

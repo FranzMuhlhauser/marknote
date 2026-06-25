@@ -66,6 +66,24 @@ export function TableContextMenu({ editor, position, onClose }: TableContextMenu
       label: 'Eliminar tabla',
       action: () => editor.chain().focus().deleteTable().run()
     },
+    { separator: true },
+    {
+      label: 'Alinear izquierda',
+      action: () => editor.chain().focus().setCellAttribute('align', 'left').run()
+    },
+    {
+      label: 'Centrar',
+      action: () => editor.chain().focus().setCellAttribute('align', 'center').run()
+    },
+    {
+      label: 'Alinear derecha',
+      action: () => editor.chain().focus().setCellAttribute('align', 'right').run()
+    },
+    {
+      label: 'Restablecer alineación',
+      action: () => editor.chain().focus().setCellAttribute('align', null).run()
+    },
+    { separator: true },
     {
       label: 'Combinar celdas',
       action: () => editor.chain().focus().mergeCells().run()

@@ -15,8 +15,10 @@ import { WelcomeScreen } from './components/WelcomeScreen'
 import { Settings } from './components/Settings'
 import { OnboardingModal } from './components/OnboardingModal'
 import { TableContextMenu } from './components/TableContextMenu'
+import { TableSizePicker } from './components/TableSizePicker'
 import { ConfirmDialog } from './components/ConfirmDialog'
 import { mdToHtml, htmlToMd } from './utils/markdown'
+import { registerTablePicker } from './utils/tablePicker'
 import { getCustomWords, addCustomWord } from './utils/customDictionary'
 import { exportHtml, exportPdf } from './utils/export'
 import { loadTheme, saveTheme, getSystemTheme, resolveTheme, type ThemeId } from './utils/themes'
@@ -86,9 +88,12 @@ function App() {
   const [showWelcome, setShowWelcome] = useState(true)
   const [showOnboarding, setShowOnboarding] = useState(() => localStorage.getItem('marknote-onboarding-shown') !== 'true')
   const [tableMenuPos, setTableMenuPos] = useState<{ x: number; y: number } | null>(null)
+  const [tableBtnPos, setTableBtnPos] = useState<{ x: number; y: number } | null>(null)
+  const [tablePickerPos, setTablePickerPos] = useState<{ x: number; y: number } | null>(null)
   const [pendingConfirm, setPendingConfirm] = useState<PendingConfirm | null>(null)
   const sourceRef = useRef<HTMLTextAreaElement>(null)
   const switchingTab = useRef(false)
+  const tablePickerEditorRef = useRef<any>(null)
 
   const activeTab = tabs.find(t => t.id === activeTabId) ?? null
 
@@ -217,6 +222,31 @@ function App() {
       setUpdateStatus({ status, ...payload })
     })
   }, [])
+
+  useEffect(() => {
+    registerTablePicker((editor, position) => {
+      tablePickerEditorRef.current = editor
+      setTablePickerPos(position)
+    })
+    return () => registerTablePicker(null)
+  }, [])
+
+  useEffect(() => {
+    if (!editor) return
+    const handleSelection = () => {
+      if (editor.isActive('table')) {
+        const tableEl = editor.view.dom.querySelector('table')
+        if (tableEl) {
+          const rect = tableEl.getBoundingClientRect()
+          setTableBtnPos({ x: rect.left + rect.width / 2, y: rect.top - 12 })
+        }
+      } else {
+        setTableBtnPos(null)
+      }
+    }
+    editor.on('selectionUpdate', handleSelection)
+    return () => { editor.off('selectionUpdate', handleSelection) }
+  }, [editor])
 
   const syncEditorToTab = useCallback(() => {
     if (!editor || !activeTabId) return
@@ -918,6 +948,26 @@ function App() {
               editor={editor}
               position={tableMenuPos}
               onClose={() => setTableMenuPos(null)}
+            />
+          )}
+          {tableBtnPos && !tableMenuPos && (
+            <div
+              className="table-menu-btn"
+              style={{ left: tableBtnPos.x, top: tableBtnPos.y }}
+              onClick={() => setTableMenuPos({ x: tableBtnPos.x - 12, y: tableBtnPos.y + 28 })}
+              title="Operaciones de tabla"
+            >
+              ⊞
+            </div>
+          )}
+          {tablePickerPos && (
+            <TableSizePicker
+              position={tablePickerPos}
+              onSelect={(rows, cols) => {
+                tablePickerEditorRef.current?.chain().focus().insertTable({ rows, cols, withHeaderRow: true }).run()
+                setTablePickerPos(null)
+              }}
+              onClose={() => setTablePickerPos(null)}
             />
           )}
         </main>
