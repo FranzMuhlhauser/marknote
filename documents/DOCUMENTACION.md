@@ -375,12 +375,14 @@ La aplicación sigue un diseño de **3 columnas**:
 | Ctrl+Tab / Ctrl+Shift+Tab | Siguiente / anterior pestaña |
 | Ctrl+Z | Deshacer |
 | Ctrl+Y | Rehacer |
-| Ctrl+F / Ctrl+H | Búsqueda y reemplazo |
+| Ctrl+F | Buscar |
+| Ctrl+H | Buscar y reemplazar (foco en reemplazar) |
 | Ctrl+Shift+P | Paleta de comandos |
 | Ctrl+B | Negrita |
 | Ctrl+I | Cursiva |
 | Ctrl+U | Subrayado |
-| Ctrl+1/2/3 | Encabezado H1/H2/H3 |
+| Ctrl+Alt+1/2/3 | Encabezado H1/H2/H3 |
+| F9 | Explorador de archivos |
 | F11 | Pantalla completa |
 | Escape | Cerrar diálogos y menús contextuales; salir de vista fuente |
 
@@ -3070,3 +3072,166 @@ María,Viña del Mar
 | **Archivo .txt no delimitado** | Media | Un `.txt` que no contiene ningún delimitador detectable retorna `null` → toast de error. Correcto. |
 | **Editor no inicializado** | Muy baja | `importCsv` verifica `if (!editor) return` antes de cualquier operación. |
 | **Archivo .txt con texto libre que casualmente contiene delimitadores** | Baja | `detectDelimiter` puede elegir un falso positivo. El usuario verá una tabla con datos incorrectos y puede deshacer (Ctrl+Z). Documentado como limitación inherente. |
+
+---
+
+## P1 — Preservación de jerarquía en task lists anidadas
+
+### Problema
+
+Las listas de tareas anidadas (task lists con sub-items) perdían su estructura jerárquica durante el roundtrip Tiptap → HTML → Turndown → Markdown → markdown-it → HTML → Tiptap. Los hijos aparecían al mismo nivel que los padres (Bug P1-C5) o la lista completa se perdía (Bug P1-C9).
+
+### Causa raíz
+
+Dos funciones independientes en `src/renderer/src/utils/markdown.ts` no manejaban indentación:
+
+1. **Regla `taskList` de Turndown** (líneas 17-32): Procesaba `<li>` → iteraba sobre `div.childNodes`, tomaba todo el `div.innerHTML` y lo pasaba a `turndown.turndown()`. El contenido anidado (`<ul data-type="taskList">` dentro del `<div>`) se convertía a markdown plano sin indentación, quedando al mismo nivel que el padre.
+
+2. **`preprocessTaskLists`** (líneas 113-135): El regex `[*-] \[[ x]\] .+` solo capturaba items en columna 0. Items indentados (`  - [ ] Hijo`) no eran reconocidos como task lists, por lo que markdown-it los trataba como listas comunes, perdiendo los checkboxes.
+
+### Solución aplicada
+
+**1. Turndown `taskList` rule** — Separar el contenido del `<div>` en dos partes:
+   - Contenido textual (párrafos, inline formatting) → se procesa con `turndown.turndown()`
+   - Lista anidada (`<ul data-type="taskList">`) → se procesa recursivamente y cada línea se indenta con 2 espacios por nivel
+
+```typescript
+replacement: (_content: string, node: any) => {
+  const items = Array.from(node.childNodes)
+    .filter((child: any) => child.nodeName === 'LI')
+    .map((li: any) => {
+      const checked = li.getAttribute('data-checked') === 'true'
+      const div = li.querySelector('div')
+      let text = ''
+      let nestedHtml = ''
+      if (div) {
+        for (const child of div.childNodes) {
+          if (child.nodeName === 'UL' && child.getAttribute?.('data-type') === 'taskList') {
+            nestedHtml = turndown.turndown(child.outerHTML)
+          } else if (child.nodeType === 1 || (child.nodeType === 3 && child.textContent.trim())) {
+            text += child.nodeType === 3 ? child.textContent : child.outerHTML
+          }
+        }
+        text = turndown.turndown(text.trim()).trim()
+      }
+      const line = `- [${checked ? 'x' : ' '}] ${text}`
+      if (nestedHtml) {
+        nestedHtml = nestedHtml.replace(/\n+$/, '')
+        const indented = nestedHtml.split('\n').map(l => '  ' + l).join('\n')
+        return line + '\n' + indented
+      }
+      return line
+    })
+  return items.join('\n') + '\n\n'
+}
+```
+
+**2. `preprocessTaskLists`** — Reemplazar el regex plano por parseo línea por línea con detección de indentación y construcción recursiva de `<ul>` anidados:
+
+```typescript
+function preprocessTaskLists(source: string): string {
+  const blocks: string[] = []
+  let s = source.replace(/(```[\s\S]*?```|`[^`\n]+`)/g, (m) => {
+    blocks.push(m)
+    return `\x00CB${blocks.length - 1}\x00`
+  })
+  s = s.replace(
+    /(?:^|\n)((?:[ \t]*[*-] \[[ x]\] .+(?:\n|$))+)/gm,
+    (block) => {
+      const lines = block.trim().split('\n')
+      const parsed = lines.map(line => {
+        const m = line.match(/^([ \t]*)[*-] \[([ x])\] (.+)$/)
+        if (!m) return null
+        return { indent: m[1].length, checked: m[2] === 'x', content: m[3] }
+      }).filter(Boolean) as { indent: number; checked: boolean; content: string }[]
+      if (!parsed.length) return ''
+
+      function buildList(idx: number, minIndent: number): { html: string; nextIdx: number } {
+        const items: string[] = []
+        let i = idx
+        while (i < parsed.length && parsed[i].indent >= minIndent) {
+          if (parsed[i].indent > minIndent) { i++; continue }
+          const { checked, content } = parsed[i]
+          const html = md.renderInline(content)
+          let nested = ''
+          if (i + 1 < parsed.length && parsed[i + 1].indent > minIndent) {
+            const result = buildList(i + 1, parsed[i + 1].indent)
+            nested = result.html
+            i = result.nextIdx - 1
+          }
+          items.push(`<li data-type="taskItem" data-checked="${checked}"><label><input type="checkbox"${checked ? ' checked' : ''}></label><div><p>${html}</p>${nested}</div></li>`)
+          i++
+        }
+        return { html: '\n<ul data-type="taskList">\n' + items.join('\n') + '\n</ul>\n', nextIdx: i }
+      }
+
+      return buildList(0, parsed[0].indent).html
+    }
+  )
+  s = s.replace(/\x00CB(\d+)\x00/g, (_, i) => blocks[Number(i)])
+  return s
+}
+```
+
+### Archivo modificado
+
+| Archivo | Cambio |
+|---|---|
+| `src/renderer/src/utils/markdown.ts` | Regla Turndown `taskList` reescrita (recursión + indentación). `preprocessTaskLists` reescrito (parseo por indentación). |
+
+### Casos de prueba
+
+| ID | Descripción | Resultado |
+|---|---|---|
+| C1 | `- [ ] Simple task` | ✅ |
+| C2 | `- [x] Done\n- [ ] Pending` | ✅ |
+| C3 | `- [x] **Bold** and *italic*` | ✅ (cosmético: `_italic_` vs `*italic*` — preexistente en Turndown) |
+| C4 | `- [ ] [link](url) and \`code\`` | ⚠️ (placeholder null-byte issue preexistente en pipeline) |
+| C5 | `- [ ] Parent\n  - [ ] Child 1\n  - [ ] Child 2` | ✅ |
+| C6 | `- [ ] Level 1\n  - [ ] Level 2\n    - [ ] Level 3` | ✅ |
+| C7 | `- [ ] A\n  - [ ] B\n    - [ ] C\n  - [ ] D\n- [ ] E` | ✅ |
+| C8 | `- [x] **Parent** task\n  - [ ] *Child* task` | ✅ |
+| C9 | `- [ ] A\n  - [ ] B` | ✅ (sin items vacíos) |
+
+### Bugs preexistentes no resueltos
+
+- **C4**: Inline code en task items se pierde porque `md.renderInline()` reemplaza null bytes (`\x00`) con U+FFFD, rompiendo el placeholder del código protegido. Afecta a la implementación original también.
+- **C3/C8**: Turndown prefiere `_italic_` sobre `*italic*` (cosmético, no afecta funcionalidad).
+- **C9 original**: Items vacíos (`- [ ]` sin texto) no son capturados por el regex `.+` (comportamiento intencional para evitar listas vacías).
+
+### Validaciones
+
+- ✅ `npx tsc --noEmit` — sin errores de tipos
+- ✅ `npm run build` — compilación exitosa
+
+---
+
+## P11 — Consolidación de atajos de teclado (2026-06-25)
+
+### Causa raíz del conflicto
+
+Dos capas independientes manejaban el teclado simultáneamente: Tiptap (editor) y App.tsx (ventana global). Cuando ambas definían el mismo shortcut, ambos handlers se ejecutaban, causando comportamientos inesperados (ej. Strike + Guardar como simultáneos, o Negrita + Explorador compitiendo por Ctrl+B).
+
+### Solución implementada
+
+1. **`if (e.defaultPrevented) return`**: Guardia en App.tsx que cede prioridad a Tiptap cuando el editor ya procesó el evento. Tiptap ejecuta `preventDefault()` al manejar un shortcut, y la guardia salta el resto del handler de App.tsx.
+2. **Comportamiento contextual**: Los shortcuts compartidos (Ctrl+Shift+S) son ahora contextuales — priorizan Tiptap dentro del editor y App.tsx fuera de él.
+3. **Nuevo shortcut exclusivo (F9)**: El Explorador se mueve a F9, tecla libre de conflictos con todos los atajos de Tiptap.
+
+### Tabla de cambios
+
+| Atajo | Antes | Después | Motivo |
+|-------|-------|---------|--------|
+| Ctrl+B | Explorador (con guardia de foco en editor) | Negrita (siempre) — estándar universal | `defaultPrevented` prioriza Tiptap. Explorador movido a F9 |
+| F9 | — | Explorador de archivos | Nuevo shortcut exclusivo, sin conflictos |
+| Ctrl+Shift+S | Strike + Guardar como (ambos se disparaban) | Strike en editor / Guardar como fuera | `defaultPrevented` da prioridad contextual |
+| Ctrl+F | Buscar | Buscar (foco en buscar) | Separación de Ctrl+F y Ctrl+H |
+| Ctrl+H | Buscar (mismo comportamiento que Ctrl+F) | Buscar y reemplazar (foco en reemplazar) | Comportamiento diferenciado |
+| Ctrl+1/2/3 | (mostrado como shortcut de encabezados) | Ctrl+Alt+1/2/3 (corregido) | El shortcut real de Tiptap para encabezados es Mod+Alt+N |
+| Escape | Cerrar diálogos | Cerrar diálogos | Sin cambios, documentado explícitamente |
+
+### Filosofía para futuros desarrollos
+
+> Los atajos universales de edición Markdown nunca deben ser reemplazados por atajos propios de la aplicación.
+
+Esto garantiza que la experiencia de escritura Markdown sea predecible y estándar. Los atajos de la aplicación se asignan a teclas libres de conflictos con el editor. Cualquier nuevo shortcut debe ser verificado contra la tabla completa de atajos de Tiptap antes de ser asignado.

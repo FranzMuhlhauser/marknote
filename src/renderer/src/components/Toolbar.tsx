@@ -196,7 +196,7 @@ export function Toolbar({
         <button
           className="toolbar-btn"
           onClick={onToggleExplorer}
-          title="Explorador (Ctrl+B)"
+          title="Explorador (F9)"
         >🗂</button>
         <button
           className="toolbar-btn"

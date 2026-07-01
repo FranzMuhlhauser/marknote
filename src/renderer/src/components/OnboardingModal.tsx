@@ -24,7 +24,7 @@ const steps: OnboardingStep[] = [
   },
   {
     title: 'Explorador de Archivos',
-    description: 'Abre una carpeta con Ctrl+B. Gestiona archivos, renombra, duplica y organiza tus documentos. Haz clic derecho para opciones.',
+    description: 'Abre una carpeta con F9. Gestiona archivos, renombra, duplica y organiza tus documentos. Haz clic derecho para opciones.',
     icon: '📁'
   },
   {

@@ -23,6 +23,7 @@ const searchPlugin = new Plugin({
 interface SearchReplaceProps {
   editor: Editor | null
   onClose: () => void
+  initialFocus?: 'search' | 'replace'
 }
 
 function findMatches(editor: Editor, query: string): { from: number; to: number }[] {
@@ -41,16 +42,21 @@ function findMatches(editor: Editor, query: string): { from: number; to: number 
   return matches
 }
 
-export function SearchReplace({ editor, onClose }: SearchReplaceProps) {
+export function SearchReplace({ editor, onClose, initialFocus = 'search' }: SearchReplaceProps) {
   const [search, setSearch] = useState('')
   const [replace, setReplace] = useState('')
   const inputRef = useRef<HTMLInputElement>(null)
+  const replaceInputRef = useRef<HTMLInputElement>(null)
   const [matches, setMatches] = useState<{ from: number; to: number }[]>([])
   const [matchIdx, setMatchIdx] = useState(0)
 
   useEffect(() => {
-    inputRef.current?.focus()
-  }, [])
+    if (initialFocus === 'replace') {
+      replaceInputRef.current?.focus()
+    } else {
+      inputRef.current?.focus()
+    }
+  }, [initialFocus])
 
   useEffect(() => {
     if (!editor || !search) { setMatches([]); return }
@@ -120,7 +126,7 @@ export function SearchReplace({ editor, onClose }: SearchReplaceProps) {
         <button className="toolbar-btn" onClick={onClose} title="Close (Esc)">✕</button>
       </div>
       <div className="search-row">
-        <input type="text" placeholder="Reemplazar..." value={replace} onChange={e => setReplace(e.target.value)} onKeyDown={e => e.key === 'Enter' && replaceOne()} />
+        <input ref={replaceInputRef} type="text" placeholder="Reemplazar..." value={replace} onChange={e => setReplace(e.target.value)} onKeyDown={e => e.key === 'Enter' && replaceOne()} />
         <button className="toolbar-btn" onClick={replaceOne} title="Replace">R</button>
         <button className="toolbar-btn" onClick={replaceAll} title="Replace all">All</button>
       </div>

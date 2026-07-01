@@ -1,5 +1,5 @@
 const tips = [
-  'Presiona Ctrl+B para mostrar u ocultar el explorador.',
+  'Presiona F9 para mostrar u ocultar el explorador.',
   'Ctrl+Shift+P abre la paleta de comandos.',
   'Ctrl+F para buscar y reemplazar texto.',
   'Usa / en el editor para acceder a comandos rápidos.',

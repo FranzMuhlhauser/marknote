@@ -75,6 +75,7 @@ function App() {
   const [theme, setTheme] = useState<ThemeId>(loadTheme)
   const [fontSize, setFontSize] = useState(() => Number(localStorage.getItem('marknote-font-size')) || 16)
   const [showSearch, setShowSearch] = useState(false)
+  const [searchMode, setSearchMode] = useState<'search' | 'replace'>('search')
   const [showPalette, setShowPalette] = useState(false)
   const [showOutline, setShowOutline] = useState(true)
   const [showStats, setShowStats] = useState(false)
@@ -785,6 +786,7 @@ function App() {
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
+      if (e.defaultPrevented) return
       if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === 'P') {
         e.preventDefault(); setShowPalette(p => !p); return
       }
@@ -804,10 +806,10 @@ function App() {
         e.preventDefault(); newDoc(); return
       }
       if ((e.ctrlKey || e.metaKey) && e.key === 'f') {
-        e.preventDefault(); setShowSearch(s => !s); return
+        e.preventDefault(); setSearchMode('search'); setShowSearch(s => !s); return
       }
       if ((e.ctrlKey || e.metaKey) && e.key === 'h') {
-        e.preventDefault(); setShowSearch(s => !s); return
+        e.preventDefault(); setSearchMode('replace'); setShowSearch(s => !s); return
       }
       if ((e.ctrlKey || e.metaKey) && e.key === 'w') {
         e.preventDefault(); if (activeTabId) closeTab(activeTabId); return
@@ -826,12 +828,8 @@ function App() {
       if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === 'M') {
         e.preventDefault(); toggleSource(); return
       }
-      if ((e.ctrlKey || e.metaKey) && e.key === 'b') {
-        // Only toggle sidebar if not focused in the editor (let editor handle bold)
-        const pm = document.querySelector('.ProseMirror')
-        if (!pm || !pm.contains(document.activeElement)) {
-          e.preventDefault(); setShowExplorer(s => !s); return
-        }
+      if (e.key === 'F9') {
+        e.preventDefault(); setShowExplorer(s => !s); return
       }
       if (e.key === 'F11') {
         e.preventDefault(); setFocusMode(f => !f); return
@@ -917,7 +915,7 @@ function App() {
         onReorder={handleReorderTab}
       />
 
-      {showSearch && <SearchReplace editor={editor} onClose={() => setShowSearch(false)} />}
+      {showSearch && <SearchReplace editor={editor} onClose={() => setShowSearch(false)} initialFocus={searchMode} />}
 
       <div className="main-content">
         {!focusMode && (

@@ -24,8 +24,25 @@ turndown.addRule('taskList', {
       .map((li: any) => {
         const checked = li.getAttribute('data-checked') === 'true'
         const div = li.querySelector('div')
-        const text = div ? turndown.turndown(div.innerHTML) : ''
-        return `- [${checked ? 'x' : ' '}] ${text.trim()}`
+        let text = ''
+        let nestedHtml = ''
+        if (div) {
+          for (const child of div.childNodes) {
+            if (child.nodeName === 'UL' && child.getAttribute?.('data-type') === 'taskList') {
+              nestedHtml = turndown.turndown(child.outerHTML)
+            } else if (child.nodeType === 1 || (child.nodeType === 3 && child.textContent.trim())) {
+              text += child.nodeType === 3 ? child.textContent : child.outerHTML
+            }
+          }
+          text = turndown.turndown(text.trim()).trim()
+        }
+        const line = `- [${checked ? 'x' : ' '}] ${text}`
+        if (nestedHtml) {
+          nestedHtml = nestedHtml.replace(/\n+$/, '')
+          const indented = nestedHtml.split('\n').map(l => '  ' + l).join('\n')
+          return line + '\n' + indented
+        }
+        return line
       })
     return items.join('\n') + '\n\n'
   }
@@ -117,17 +134,36 @@ function preprocessTaskLists(source: string): string {
     return `\x00CB${blocks.length - 1}\x00`
   })
   s = s.replace(
-    /(?:^|\n)((?:[*-] \[[ x]\] .+(?:\n|$))+)/gm,
+    /(?:^|\n)((?:[ \t]*[*-] \[[ x]\] .+(?:\n|$))+)/gm,
     (block) => {
       const lines = block.trim().split('\n')
-      const items = lines.map(line => {
-        const m = line.match(/^[*-] \[([ x])\] (.+)$/)
-        if (!m) return ''
-        const checked = m[1] === 'x'
-        const html = md.renderInline(m[2])
-        return `<li data-type="taskItem" data-checked="${checked}"><label><input type="checkbox"${checked ? ' checked' : ''}></label><div><p>${html}</p></div></li>`
-      })
-      return '\n<ul data-type="taskList">\n' + items.join('\n') + '\n</ul>\n'
+      const parsed = lines.map(line => {
+        const m = line.match(/^([ \t]*)[*-] \[([ x])\] (.+)$/)
+        if (!m) return null
+        return { indent: m[1].length, checked: m[2] === 'x', content: m[3] }
+      }).filter(Boolean) as { indent: number; checked: boolean; content: string }[]
+      if (!parsed.length) return ''
+
+      function buildList(idx: number, minIndent: number): { html: string; nextIdx: number } {
+        const items: string[] = []
+        let i = idx
+        while (i < parsed.length && parsed[i].indent >= minIndent) {
+          if (parsed[i].indent > minIndent) { i++; continue }
+          const { checked, content } = parsed[i]
+          const html = md.renderInline(content)
+          let nested = ''
+          if (i + 1 < parsed.length && parsed[i + 1].indent > minIndent) {
+            const result = buildList(i + 1, parsed[i + 1].indent)
+            nested = result.html
+            i = result.nextIdx - 1
+          }
+          items.push(`<li data-type="taskItem" data-checked="${checked}"><label><input type="checkbox"${checked ? ' checked' : ''}></label><div><p>${html}</p>${nested}</div></li>`)
+          i++
+        }
+        return { html: '\n<ul data-type="taskList">\n' + items.join('\n') + '\n</ul>\n', nextIdx: i }
+      }
+
+      return buildList(0, parsed[0].indent).html
     }
   )
   s = s.replace(/\x00CB(\d+)\x00/g, (_, i) => blocks[Number(i)])
