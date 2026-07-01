@@ -1,9 +1,24 @@
 # Fase 1: Consolidación de la parte superior
 
+## Estado
+✅ **COMPLETADO** (2026-07-02)
+
 ## Objetivo
 Reducir de 5 barras a 3 en la zona superior, eliminar duplicación y reorganizar la toolbar.
 
-## Cambios necesarios
+## Verificación
+Este plan fue revisado el 2026-07-02. Todos los cambios propuestos ya estaban implementados:
+- ✅ MenuBar.tsx: ya tiene title, modified, updateStatus, drag region
+- ✅ Toolbar.tsx: ya no tiene onFullscreen, ya tiene onToggleSource
+- ✅ App.tsx: no existe `<header className="titlebar">`
+- ✅ App.css: ya tiene `-webkit-app-region: drag` en menubar
+- ✅ La reorganización de la toolbar fue superada por una simplificación más radical (2026-06-22)
+
+**El plan fue superado por cambios posteriores. No requiere implementación adicional.**
+
+---
+
+## Cambios necesarios (histórico)
 
 ### 1. MenuBar.tsx
 **Añadir props**: `title`, `modified`, `updateInfo`, `onUpdate`

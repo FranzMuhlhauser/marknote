@@ -7,6 +7,7 @@ import TaskList from '@tiptap/extension-task-list'
 import TaskItem from '@tiptap/extension-task-item'
 import { wrappingInputRule } from '@tiptap/core'
 import Table from '@tiptap/extension-table'
+import { TextSelection } from '@tiptap/pm/state'
 import TableRow from '@tiptap/extension-table-row'
 import TableCell from '@tiptap/extension-table-cell'
 import TableHeader from '@tiptap/extension-table-header'
@@ -27,6 +28,30 @@ import { TableSort, tableSortKey } from './TableSort'
 export { tableSortKey }
 
 const lowlight = createLowlight(common)
+
+const CustomTable = Table.extend({
+  addKeyboardShortcuts() {
+    return {
+      'Shift-Tab': () => {
+        if (this.editor.commands.goToPreviousCell()) return true
+        const { state } = this.editor
+        const { $anchor } = state.selection
+        let d = $anchor.depth
+        while (d >= 0 && $anchor.node(d).type.name !== 'table') d--
+        if (d < 0) return false
+        const before = $anchor.before(d)
+        this.editor.chain().focus()
+          .command(({ tr, dispatch }) => {
+            tr.insert(before, state.schema.nodes.paragraph.create())
+            tr.setSelection(TextSelection.create(tr.doc, before + 1, before + 1))
+            if (dispatch) dispatch(tr)
+            return true
+          }).run()
+        return true
+      },
+    }
+  },
+})
 
 export function getExtensions() {
   return [
@@ -53,7 +78,7 @@ export function getExtensions() {
         ]
       }
     }).configure({ nested: true }),
-    Table,
+    CustomTable,
     TableRow,
     TableCell.extend({
       addAttributes() {

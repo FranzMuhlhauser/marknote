@@ -217,7 +217,6 @@ La aplicación sigue un diseño de **3 columnas**:
 - **Nuevo documento** en blanco (Ctrl+N)
 - **Abrir archivo** .md del equipo (Ctrl+O)
 - **Guardar** / **Guardar como** (Ctrl+S, Ctrl+Shift+S)
-- **Autoguardado** cada 30 segundos si hay cambios sin guardar
 - **Archivos recientes** (localStorage, últimos 10)
 - **Explorador de archivos lateral** con secciones: Favoritos ★, Recientes 🕐, Proyecto 📂, Papelera 🗑
 - Las sidebars tienen `flex-shrink: 1` y `min-width: 160px` para responsive; el editor central tiene `min-width: 300px` y `flex: 1 1 400px`
@@ -280,7 +279,7 @@ La aplicación sigue un diseño de **3 columnas**:
 - Panel modal accesible desde menú Archivo > Configuración o botón ⚙ en toolbar
 - Secciones:
   - **Apariencia**: selector de temas con botones, editor de tema personalizado (6 colores)
-  - **Editor**: slider de tamaño de fuente (14-22px), toggle de autoguardado
+  - **Editor**: slider de tamaño de fuente (14-22px)
   - **Plugins**: lista de todos los plugins activos con nombre, descripción y estado
   - **Atajos**: tabla de atajos de teclado disponibles
 
@@ -615,10 +614,6 @@ Solo si ambos pasan sin errores se considera terminado.
 - Atajo Escape vuelve a WYSIWYG
 - La vista fuente hereda estilos del editor (padding, font-size, max-width, caret-color)
 
-### Toggle Auto-save
-- En Settings > Editor: checkbox de autoguardado
-- Controla el intervalo de `setInterval` de 30s en App.tsx
-
 ### lucide-react Icons
 - La Toolbar usa `lucide-react` para iconografía (FileText, Bold, Italic, etc.)
 
@@ -890,7 +885,6 @@ Usuario → clic derecho en palabra mal escrita
 - **TabContextMenu detecta solo tablas del editor activo**: El menú contextual usa `view.posAtCoords` y funciona correctamente, pero no hay atajo de teclado para tablas.
 - **Source view ↔ WYSIWYG pierde sintaxis no compatible**: Elementos que Turndown no puede convertir (como atributos HTML avanzados en Markdown) pueden perderse al alternar entre vistas.
 - **El modo foco atenúa Stats**: Por diseño, pero Stats no reaparece al hover a diferencia de sidebars (mejora menor pendiente).
-- **Autoguardado sobrescribe sin confirmación**: Si el archivo se modificó externamente, el autoguardado lo sobrescribe.
 - **Decoraciones de búsqueda (SearchReplace) no se limpian al cerrar**: Quedan decoraciones en el editor hasta que se abre una nueva búsqueda (no visible para el usuario pero sí en el estado interno de ProseMirror).
 - **TabView (vista fuente) en pestaña nueva**: Al abrir vista fuente y luego cambiar de pestaña, el textarea no se sincroniza correctamente si hubo cambios sin guardar.
 
@@ -947,7 +941,6 @@ Electron Main Process (src/main/index.ts)
             │   ├── showSearch: boolean, showCommandPalette, showSettings
             │   ├── focusMode: boolean
             │   ├── theme: string, customTheme
-            │   └── autoSave: boolean
             │
             ├── components/ (UI)
             ├── extensions/ (TipTap personalizadas)
@@ -1093,7 +1086,7 @@ El `transformPastedHTML` actual (líneas 152-166) solo modifica HTML que contien
 |---|---|---|---|
 | 1 | `markdown.ts` usa plugins `markdown-it-sub`, `markdown-it-sup`, `markdown-it-footnote`, `markdown-it-mark`, `markdown-it-ins`, `markdown-it-kbd` | `markdown.ts:4` — solo `new MarkdownIt({...})` sin plugins adicionales. Esas 6 dependencias **no existen** en `package.json`. | ❌ Doc incorrecta |
 | 2 | `package.json` version = v0.3.1 | `"version": "0.1.2"` — desactualizada respecto al historial documentado | ⚠️ Desincronizado |
-| 3 | "Toggle Auto-save" en Settings controla el intervalo de 30s | `App.tsx:241-245`: el `useEffect` de autoguardado se ejecuta **siempre** que `activeTab?.modified` es true, sin verificar la preferencia del usuario | 🐛 Bug |
+| 3 | "Toggle Auto-save" en Settings controla el intervalo de 30s | No existe en App.tsx ni Settings.tsx — funcionalidad documentada pero nunca implementada | ❌ No implementado |
 | 4 | Workspace folder se persiste entre sesiones | No hay persistencia (`localStorage` ni archivo de config), se pierde al reiniciar | ⚠️ No implementado |
 | 5 | `lang="en"` en HTML (doc implícito) | `index.html:3`: `lang="en"` pero toda la UI está en español | ⚠️ Inconsistencia |
 | 6 | Ctrl+Tab listado como [ ] en Roadmap (README) | `App.tsx:480-489` — Ctrl+Tab **ya está implementado** (navegación circular) | ⚠️ Roadmap desactualizado |
@@ -1117,7 +1110,7 @@ El `transformPastedHTML` actual (líneas 152-166) solo modifica HTML que contien
 - **CSS global** (~1400 líneas sin revisar): estilos planos sin modules, 6 temas inline. Riesgo de colisiones y dificultad para escalar.
 - **Flujo de pestañas frágil**: el flag `switchingTab` con `setTimeout(50ms)` es un hack temporal. Podría fallar en condiciones de latencia alta.
 - **SlashCommand usa `createRoot()` directo** en vez de integración React estándar, potencial conflicto con StrictMode.
-- **Auto-save toggle sin efecto**: la UI muestra el control pero el backend no lo respeta.
+- **Auto-save documentado pero no implementado**: La documentación menciona un toggle de autoguardado que nunca fue implementado en el código. Verificado en 2026-07-02.
 - **Tema personalizado duplica lógica** entre `themes.ts:saveTheme()` y `Settings.tsx:applyCustomTheme()` con el mismo conjunto de propiedades CSS.
 
 ### Riesgos de Modificación
@@ -1131,7 +1124,6 @@ El `transformPastedHTML` actual (líneas 152-166) solo modifica HTML que contien
 ## Tareas Pendientes (Actualizado 2026-06-22)
 
 ### Bugs Confirmados
-- [ ] **Auto-save toggle inoperante**: El checkbox en Settings no controla el `useEffect` de autoguardado en `App.tsx:241`
 - [ ] **markdown-it plugins documentados pero ausentes**: `markdown-it-sub`, `markdown-it-sup`, `markdown-it-footnote`, `markdown-it-mark`, `markdown-it-ins`, `markdown-it-kbd` no están en `package.json` ni se importan en `markdown.ts`
 - [ ] **package.json version desactualizada**: `"0.1.2"` contra v0.3.1 documentado
 
@@ -1173,7 +1165,7 @@ El `transformPastedHTML` actual (líneas 152-166) solo modifica HTML que contien
 4. Identificación de 3 bugs confirmados y 6 items de deuda técnica
 
 **Problemas encontrados**:
-1. **Auto-save toggle inoperante**: El checkbox "Auto-guardado cada 30s" en Settings no está conectado al `useEffect` que ejecuta el guardado periódico.
+1. **Auto-save documentado pero ausente**: La documentación menciona "Auto-guardado cada 30s" pero no existe en el código. Verificado posteriormente como funcionalidad nunca implementada.
 2. **6 dependencias markdown-it documentadas pero inexistentes**: Ni en package.json ni en código.
 3. **package.json version = "0.1.2"** vs v0.3.1 documentado.
 4. **Ctrl+Tab ya implementado** en código (navegación circular) pero listado como pendiente en README Roadmap.
@@ -1183,7 +1175,6 @@ El `transformPastedHTML` actual (líneas 152-166) solo modifica HTML que contien
 8. **SearchReplace ya limpia decoraciones** al desmontar (problema conocido resuelto).
 
 **Próximas tareas recomendadas**:
-- Corregir auto-save toggle en App.tsx y Settings.tsx
 - Remover `@tiptap/extension-image` de package.json
 - Actualizar package.json version
 - Actualizar README Roadmap
@@ -1245,7 +1236,7 @@ El `transformPastedHTML` actual (líneas 152-166) solo modifica HTML que contien
 
 **Soluciones aplicadas**:
 - Tabla completa de extensiones TipTap (16 extensiones vs 12 anteriores)
-- Nueva sección "Funcionalidades Implementadas (Extendido)" con: Video Embebido, Menú Slash Command, Table Size Picker, BoldItalic, Markdown-it Extended, Default Content, File Association / Single Instance, Markdown Source Editor, Toggle Auto-save, lucide-react Icons
+- Nueva sección "Funcionalidades Implementadas (Extendido)" con: Video Embebido, Menú Slash Command, Table Size Picker, BoldItalic, Markdown-it Extended, Default Content, File Association / Single Instance, Markdown Source Editor, lucide-react Icons
 - Nuevas secciones: Funcionalidades en Desarrollo, Mejoras de UI, Correcciones y Bugs Solucionados, Problemas Conocidos, Arquitectura del Proyecto, Próximos Pasos, Registro Técnico de Decisiones
 - Bitácora completa con ambas sesiones
 - Versión v0.3.1 agregada al Historial de Versiones
@@ -3235,3 +3226,250 @@ Dos capas independientes manejaban el teclado simultáneamente: Tiptap (editor) 
 > Los atajos universales de edición Markdown nunca deben ser reemplazados por atajos propios de la aplicación.
 
 Esto garantiza que la experiencia de escritura Markdown sea predecible y estándar. Los atajos de la aplicación se asignan a teclas libres de conflictos con el editor. Cualquier nuevo shortcut debe ser verificado contra la tabla completa de atajos de Tiptap antes de ser asignado.
+
+---
+
+### 2026-07-02 — Verificación de documentación y estado del proyecto
+
+**Objetivo**: Revisar el estado actual del proyecto tras leer el Manual de Buenas Prácticas y verificar bugs documentados.
+
+**Actividades realizadas**:
+1. **Revisión de Fase 1 (Consolidación Superior)**:
+   - Verificado que el plan `.opencode/plans/fase1-consolidacion-superior.md` ya está completamente implementado: MenuBar unificado (titulo + menus + update), drag region en CSS, toolbar sin onFullscreen, con onToggleSource.
+   - Las reorganizaciones de toolbar propuestas en el plan fueron superadas por una simplificacion mas radical (sesion 2026-06-22).
+   - ✅ **Plan marcado como completado** — sin cambios de codigo necesarios.
+
+2. **Verificacion del bug "Auto-save toggle inoperante"**:
+   - Buscado exhaustivamente en todo el codigo: no existe `autoSave`, `setInterval` de guardado ni checkbox en Settings.
+   - 🟢 **Conclusion**: No es un bug — es una funcionalidad documentada pero nunca implementada.
+   - Se consulto al usuario: ❌ **Decision: No implementar**. Siguiendo el principio "El mejor codigo es el que no se escribe".
+   - Se corrigieron todas las referencias en la documentacion (11 cambios).
+
+**Archivos modificados**:
+- `documents/DOCUMENTACION.md` — correccion de 11 referencias a auto-save + nueva entrada de bitacora
+- `.opencode/plans/fase1-consolidacion-superior.md` — marcado como completado con nota de verificacion
+
+**Decisiones tomadas**:
+- El auto-save documentado pero ausente se deja como esta (no se implementa)
+- La Fase 1 de consolidacion esta completa desde cambios previos
+- Se adoptara el Manual de Buenas Practicas en todas las interacciones futuras
+
+**Proximos pasos sugeridos**:
+- Abordar el fix del TDZ en getMarkdown (plan en `.opencode/plans/fix-getmarkdown-tdz.md`)
+- Revisar los demas items de deuda tecnica (App.tsx monolito, dependencia @tiptap/extension-image, etc.)
+
+### 2026-07-02 — Conexión de TableSizePicker en la Toolbar
+
+**Objetivo**: Conectar el componente `TableSizePicker` existente a la barra de herramientas (Toolbar) para permitir la inserción visual de tablas con selección de filas × columnas.
+
+**Análisis inicial**:
+- Se verificaron todas las conexiones existentes de `TableSizePicker`:
+  - `utils/tablePicker.ts` — bridge module ✅
+  - `App.tsx` — registro del callback y renderizado condicional ✅
+  - `SlashCommand.tsx` — comando /tabla abre el picker en posición del cursor ✅
+  - `CommandPalette.tsx` — comando "Insertar tabla" abre el picker centrado en el editor ✅
+  - `Toolbar.tsx` — **sin conexión** ❌
+
+**Causa raíz**: Durante la simplificación de interfaz de junio 2026 se eliminaron varios botones avanzados del toolbar (entre ellos el de tabla). Las reconexiones posteriores (documentadas el 2026-06-24) restauraron SlashCommand y CommandPalette, pero el botón de toolbar nunca se readicionó.
+
+**Cambio realizado** (1 archivo):
+- `src/renderer/src/components/Toolbar.tsx`:
+  - Se agregó `import { openTablePicker } from '../utils/tablePicker'`
+  - Se agregó botón `⊞` en el grupo "Contenido" (junto a blockquote y codeBlock)
+  - El onClick calcula la posición centrada del editor (`document.querySelector('.ProseMirror')`) y llama a `openTablePicker(editor, { x, y })`
+  - Misma estrategia de posicionamiento que CommandPalette
+
+**Validación**:
+- `npx tsc --noEmit` — sin errores de tipos ✅
+- Code review — sin observaciones críticas ✅
+- Archivos de prueba eliminados (`test_list_roundtrip.js`, `test_markdownit_list.js`, `test_full_pipeline.js`)
+
+**Arquitectura**: No se requirieron cambios en `App.tsx` ni en `MenuBar.tsx` — la conexión existente (registro de callback + render condicional de `<TableSizePicker>`) ya estaba operativa. Solo se agregó el punto de entrada faltante en la UI.
+
+**Archivos modificados**:
+- `src/renderer/src/components/Toolbar.tsx`
+
+**Sin cambios**:
+- `src/renderer/src/App.tsx`
+- `src/renderer/src/utils/tablePicker.ts`
+- `src/renderer/src/extensions/SlashCommand.tsx`
+- `src/renderer/src/components/CommandPalette.tsx`
+
+### 2026-07-02 — Refactorización de App.tsx en 3 hooks personalizados
+
+**Objetivo**: Reducir el monolito de App.tsx (~630 líneas) extrayendo la lógica en 3 hooks personalizados.
+
+**Cambios realizados**:
+
+1. **`src/renderer/src/hooks/useEditorState.ts`** (CREADO):
+   - Agrupa los 21 estados de UI + 2 refs (sourceRef, tablePickerEditorRef)
+   - 8 efectos independientes: katex/mermaid, tema, fontSize, visibilidad explorador, spellcheck init, updateStatus, tablePicker, tema del sistema
+
+2. **`src/renderer/src/hooks/useTabs.ts`** (CREADO):
+   - Toda la lógica de pestañas: estado tabs/activeTabId/switchingTab y 20+ callbacks
+   - Usa `editorRef` interno para romper la dependencia circular con useEditor
+   - App.tsx actualiza el ref vía `tabs.setEditorRef(editor)` después de crear el editor
+
+3. **`src/renderer/src/hooks/useKeyboardShortcuts.ts`** (CREADO):
+   - Manejador de atajos de teclado (keydown)
+   - Manejador beforeunload con forceClose a nivel módulo
+   - Usa getTabTitle de TabBar para consistencia
+
+4. **`src/renderer/src/App.tsx`** (REFACTORIZADO):
+   - Se reduce de ~630 a ~320 líneas
+   - Importa y usa los 3 hooks
+   - Solo mantiene: creación del editor, efectos que necesitan editor, callbridges (toggleSource, toggleTheme, importCsv, export), y JSX
+
+**Arquitectura**:
+- `useEditorState()` → se ejecuta primero, sin dependencias
+- `useTabs(...)` → crea estado de pestañas internamente, recibe setters de UI
+- `useEditor(...)` → creación del editor con onUpdate
+- `useEffect → setEditorRef` → conecta editor a useTabs
+- `useKeyboardShortcuts(...)` → registra teclado y beforeunload
+
+**Validación**:
+- `npx tsc --noEmit` — sin errores de tipos ✅
+- Code review — issues corregidos (forceClose module-level, ref pattern en startup, getTabTitle) ✅
+
+**Archivos creados**:
+- `src/renderer/src/hooks/useEditorState.ts`
+- `src/renderer/src/hooks/useTabs.ts`
+- `src/renderer/src/hooks/useKeyboardShortcuts.ts`
+
+**Archivos modificados**:
+- `src/renderer/src/App.tsx`
+- `documents/DOCUMENTACION.md`
+
+---
+
+## P5 — Comportamiento inteligente de Tab en tablas
+
+### Estado
+
+✅ **Implementado** (2026-07-01)
+
+### Problema resuelto
+
+El cursor quedaba atrapado dentro de las tablas al navegar con teclado. Shift+Tab en la primera celda no producía ningún efecto (el cursor permanecía en la celda). No había forma de salir de la tabla usando exclusivamente el teclado — el usuario debía usar el mouse.
+
+### Implementación
+
+Se extendió `@tiptap/extension-table` con `addKeyboardShortcuts()` personalizado que maneja `Shift-Tab`:
+
+| Comportamiento | Antes | Después |
+|---|---|---|
+| `Tab` en celda no-final | Siguiente celda ✅ | Siguiente celda ✅ (heredado) |
+| `Tab` en última celda | Nueva fila ✅ | Nueva fila ✅ (heredado) |
+| `Shift+Tab` en celda no-inicial | Celda anterior ✅ | Celda anterior ✅ (heredado) |
+| **`Shift+Tab` en primera celda** | **❌ No hacía nada** | **✅ Sale antes de la tabla (inserta párrafo arriba)** |
+
+**Mecanismo**: Cuando `goToPreviousCell()` retorna `false` (primera celda de la tabla), se camina hacia arriba por la profundidad del nodo `$anchor` hasta encontrar el nodo `table`. Se calcula la posición antes de la tabla (`$anchor.before(d)`), se inserta un nodo `paragraph` con `tr.insert()` y se mueve la selección al nuevo párrafo usando `TextSelection.create()`.
+
+### Archivos modificados
+
+| Archivo | Cambio | Líneas |
+|---|---|---|
+| `src/renderer/src/extensions/index.ts` | Nuevo `CustomTable = Table.extend()` con `addKeyboardShortcuts()` | +19 |
+
+### Decisiones técnicas
+
+| Decisión | Alternativas | Razón |
+|---|---|---|
+| `.extend()` sobre `Table` vs `editorProps.handleKeyDown` en App.tsx | HandleKeyDown agrega acoplamiento | `.extend()` mantiene la lógica en la capa de extensiones, consistente con `TaskItem.extend()`, `TableCell.extend()`, etc. |
+| `@tiptap/pm/state` para `TextSelection` | `prosemirror-state` directo | `@tiptap/pm/state` es el path recomendado por TipTap para compatibilidad cross-version |
+| Insertar nodo `paragraph` con `tr.insert()` | `insertContentAt()` con string | `tr.insert()` es más preciso y evita parseo HTML intermedio. Sigue el patrón de bajo nivel de ProseMirror. |
+
+### Validaciones realizadas
+
+1. ✅ `npx tsc --noEmit` — sin errores de tipos
+2. ✅ `npm run build` — compilación exitosa
+3. ✅ Tab en celda no-final → siguiente celda (sin regresión)
+4. ✅ Tab en última celda → nueva fila (sin regresión)
+5. ✅ Shift+Tab en celda no-inicial → celda anterior (sin regresión)
+6. ✅ Shift+Tab en primera celda → cursor sale antes de la tabla, párrafo insertado arriba
+
+### Casos borde considerados
+
+| Caso | Comportamiento |
+|---|---|
+| Tabla al inicio del documento (`before = 0`) | `tr.insert(0, p)` inserta párrafo antes de la tabla ✅ |
+| Tabla anidada | El while loop encuentra la tabla más interna primero ✅ |
+| Múltiples tablas consecutivas | Sale antes de la tabla actual, posición correcta en el doc ✅ |
+| Source Mode | El shortcut no aplica (editor no tiene tabla activa) ✅ |
+
+### Sin cambios en
+
+- `App.tsx`, `Toolbar.tsx`, `hooks/*`, `package.json`
+- `TableContextMenu.tsx`, `TableSizePicker.tsx`
+- `CommandPalette.tsx`, `SlashCommand.tsx`
+
+---
+
+## P10 — Drag & Drop de archivos CSV, TSV y TXT delimitados
+
+### Estado
+
+✅ **Implementado** (2026-07-01)
+
+### Problema resuelto
+
+No era posible arrastrar un archivo CSV, TSV o TXT delimitado al editor para convertirlo automáticamente en una tabla Markdown. El `handleDrop` solo procesaba imágenes; cualquier otro archivo se descartaba (`return false`). El usuario debía usar el menú "Importar CSV..." (P7) o copiar/pegar el texto manualmente (P6).
+
+### Implementación
+
+Se añadió un bloque `else-if` en `editorProps.handleDrop` (App.tsx) después del handler de imágenes existente:
+
+| Acción | Antes | Después |
+|---|---|---|
+| Arrastrar `.csv` | ❌ Sin efecto | ✅ Tabla insertada |
+| Arrastrar `.tsv` | ❌ Sin efecto | ✅ Tabla insertada |
+| Arrastrar `.txt` (pipe `\|`) | ❌ Sin efecto | ✅ Tabla insertada |
+| Arrastrar imagen | ✅ Imagen insertada | ✅ Sin cambios (mismo código) |
+| Arrastrar archivo no-soportado | ✅ `return false` (PM nativo) | ✅ `return false` (sin cambios) |
+
+**Flujo**:
+1. `handleDrop` recibe el evento
+2. Si hay imágenes: las procesa (código existente, sin cambios)
+3. Si la extensión del archivo es `.csv`, `.tsv` o `.txt`: lee el contenido con `FileReader.readAsText()`
+4. Llama a `parseDelimitedText(text)` (P6) — retorna `{headers, rows}` o `null`
+5. Si es válido: `insertTableData(editor, parsed)` (P6) inserta la tabla y `showToast()` notifica al usuario
+6. Si no es válido: `showToast('No se detectó un formato CSV, TSV o delimitado por |.')`
+
+### Archivos modificados
+
+| Archivo | Cambio | Líneas |
+|---|---|---|
+| `src/renderer/src/App.tsx` | Nuevo bloque en `handleDrop` post-imagen | +14 |
+
+### Decisiones técnicas
+
+| Decisión | Alternativas | Razón |
+|---|---|---|
+| Detectar por extensión (`file.name`) en lugar de `file.type` | `file.type` no es fiable para CSV/TSV/TXT en Electron (suele ser `text/plain` o `application/octet-stream`) | La extensión es el identificador más robusto para este tipo de archivos |
+| Reutilizar `insertTableData(editor, parsed)` en el callback async | Refactorizar `insertTableData` para aceptar `view` raw | Mínimo cambio, mismo patrón que `importCsv` (P7), `editor` accesible vía closure |
+| `reader.onload` async (mismo patrón que imágenes) | `FileReader` sync no existe | Consistente con el handler de imágenes existente |
+
+### Validaciones realizadas
+
+1. ✅ `npx tsc --noEmit` — sin errores de tipos
+2. ✅ `npm run build` — compilación exitosa
+3. ✅ Extensión sin punto → `?.toLowerCase()` retorna `undefined`, no entra en el `if`
+4. ✅ Archivo `.txt` con JSON/prosa → `parseDelimitedText` retorna `null` → toast de error
+5. ✅ Imágenes → siguen insertándose (código anterior, sin cambios)
+6. ✅ Archivos no-soportados (`.md`, `.pdf`, etc.) → `return false` (sin cambios)
+
+### Compatibilidad con subsistemas existentes
+
+| Subsistema | Compatibilidad | Detalle |
+|---|---|---|
+| **P6** (CommandPalette → "Convertir datos a tabla") | ✅ Sin cambios | Sigue usando `showPrompt` + `parseDelimitedText` + `insertTableData` |
+| **P7** (MenuBar → "Importar CSV...") | ✅ Sin cambios | Sigue leyendo por IPC `window.api.openCsvFile()` + `parseDelimitedText` + `insertTableData` |
+| **P9** (Alineación de columnas en tablas) | ✅ Sin cambios | Es independiente (atributo `align` en `TableCell`/`TableHeader`) |
+| Drag & Drop de imágenes | ✅ Sin cambios | El bloque `if (image/)` está antes del nuevo bloque |
+| Pegado desde Excel | ✅ Sin cambios | `transformPastedHTML` no fue modificado |
+
+### Sin cambios en
+
+- `tableParser.ts`, `extensions/*`, `CommandPalette.tsx`
+- `MenuBar.tsx`, `Toolbar.tsx`, `hooks/*`
+- `preload/*`, `main/*`, `package.json`

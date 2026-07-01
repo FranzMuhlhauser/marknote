@@ -3,6 +3,7 @@ import type { Editor } from '@tiptap/core'
 import { FORMATTING_HINTS, type ActiveHint } from '../utils/markdownHints'
 import { MarkdownHintCard } from './MarkdownHintCard'
 import type { ThemeId } from '../utils/themes'
+import { openTablePicker } from '../utils/tablePicker'
 
 interface ToolbarProps {
   editor: Editor | null
@@ -190,6 +191,16 @@ export function Toolbar({
           onMouseLeave={handleMouseLeave}
           data-active={editor.isActive('codeBlock')}
         >{'{}'}</button>
+        <button
+          className="toolbar-btn"
+          onClick={() => {
+            const rect = document.querySelector('.ProseMirror')?.getBoundingClientRect()
+            const x = rect ? rect.left + rect.width / 2 : window.innerWidth / 2
+            const y = rect ? rect.top + rect.height / 3 : window.innerHeight / 3
+            openTablePicker(editor, { x, y })
+          }}
+          title="Insertar tabla"
+        >⊞</button>
       </div>
       <div className="toolbar-sep" />
       <div className="toolbar-group">
