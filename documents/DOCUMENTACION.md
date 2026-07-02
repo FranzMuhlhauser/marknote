@@ -384,6 +384,8 @@ La aplicación sigue un diseño de **3 columnas**:
 | F9 | Explorador de archivos |
 | F11 | Pantalla completa |
 | Escape | Cerrar diálogos y menús contextuales; salir de vista fuente |
+| Tab (en tabla) | Siguiente celda; si es la última, añade nueva fila |
+| Shift+Tab (en tabla) | Salir de la tabla (inserta párrafo debajo) |
 
 ---
 
@@ -3473,3 +3475,202 @@ Se añadió un bloque `else-if` en `editorProps.handleDrop` (App.tsx) después d
 - `tableParser.ts`, `extensions/*`, `CommandPalette.tsx`
 - `MenuBar.tsx`, `Toolbar.tsx`, `hooks/*`
 - `preload/*`, `main/*`, `package.json`
+
+---
+
+## P12 — Corrección de regresiones en onUpdate y toggleSource (2026-07-02)
+
+### Síntomas
+
+Dos regresiones introducidas en el commit `358f766` (refactor de App.tsx en hooks):
+
+| # | Síntoma | Contexto |
+|---|---------|----------|
+| 1 | **Pérdida de contenido al editar**: El `onUpdate` del editor dejaba de guardar cambios después del primer guardado manual o cambio de pestaña. El contenido se perdía al recargar o cambiar de pestaña. | Stale closure de `activeTabId` en el callback `onUpdate` de `useEditor`. |
+| 2 | **Contenido fantasma al salir de Source Mode**: Al alternar de vista fuente a WYSIWYG, el editor mostraba contenido previo o vacío por ~16ms, luego se corregía. En algunos casos el contenido no se actualizaba en absoluto. | `setContent` se llamaba directamente en `toggleSource` antes de que el view de ProseMirror estuviera montado en el DOM. |
+
+### Causa raíz
+
+**Fix 1 — Stale closure**: El hook `useEditor` de TipTap recibe `onUpdate` en la configuración inicial. Si el closure captura `tabs.activeTabId` del render en que se creó, y React no actualiza el callback internamente (no llama a `editor.setOptions()`), el valor de `activeTabId` queda congelado. En el flujo normal:
+- Primer render: `activeTabId = "tab1"` → `onUpdate` guarda ✅
+- Tras cerrar pestaña: `activeTabId = null` → pero el closure aún ve `"tab1"` → intenta guardar en pestaña inexistente, o falla al acceder a `tabs.activeTabId` (que ahora es `null`) → early return y no guarda nunca más.
+
+**Fix 2 — Timing de setContent**: `EditorContent` es un class component cuyo `componentWillUnmount` mueve el DOM del view a un `<div>` detached (NO destruye el view). `componentDidMount` lo mueve de vuelta al contenedor activo. El padre (`App`) usa `useLayoutEffect` para disparar `setContent`, pero este efecto del padre se ejecuta DESPUÉS de `componentDidMount` del hijo. Sin embargo, en `toggleSource`:
+1. `editor.commands.setContent(mdToHtml(sourceText))` se llama directamente en el callback
+2. Esto ocurre durante el render de React (o justo después), ANTES de que `EditorContent.componentDidMount` haya recolocado el DOM
+3. `view.dispatch` intenta aplicar la transacción sobre un view cuyo DOM está detached → el contenido se aplica en el detached DOM, no en el contenedor visible
+4. Cuando `componentDidMount` recoloca el DOM, el contenido "seteado" no está presente
+
+### Solución aplicada
+
+**Fix 1** (`src/renderer/src/App.tsx`):
+- Se agregó un ref `activeTabIdRef = useRef<string | null>(null)` fuera del closure de `useEditor`
+- Se agregó un `useEffect` que sincroniza `activeTabIdRef.current = tabs.activeTabId` en cada render
+- `onUpdate` ahora lee `activeTabIdRef.current` en lugar de `tabs.activeTabId` — nunca queda stale
+
+**Fix 2** (`src/renderer/src/App.tsx`):
+- Se agregó un ref `pendingSourceContentRef = useRef<string | null>(null)`
+- `toggleSource` ya no llama a `editor.commands.setContent()` directamente — en su lugar almacena el contenido en el ref y setea `showSource = false`
+- Se agregó un `useLayoutEffect` con dependencia `[ui.showSource, editor]` que:
+  - Detecta `!showSource && pendingSourceContentRef.current !== null`
+  - Si `switchingTab` está activo, omite la operación (el ref retiene el contenido)
+  - Si no, limpia el ref y ejecuta `editor.commands.setContent(mdToHtml(content))`
+- Esto garantiza que `setContent` se ejecute DESPUÉS de que `EditorContent.componentDidMount` haya recolocado el DOM en el contenedor
+
+### Archivos modificados
+
+| Archivo | Cambio |
+|---------|--------|
+| `src/renderer/src/App.tsx` | +2 refs, +1 useEffect (sync `activeTabIdRef`), modificado `onUpdate`, modificado `toggleSource`, +1 useLayoutEffect (deferred `setContent`) |
+
+### Validaciones realizadas
+
+1. ✅ `npx tsc --noEmit` — sin errores de tipos
+2. ✅ `npm run build` — compilación exitosa
+
+### Comportamiento esperado
+
+**Fix 1**: El contenido se guarda correctamente en todas las operaciones de edición, independientemente de cambios de pestaña, guardados o cierres. `onUpdate` nunca queda con una referencia stale a `activeTabId`.
+
+**Fix 2**: Al salir de Source Mode, el contenido se establece en el editor visible sin parpadeo ni contenido fantasma. `useLayoutEffect` es síncrono con el ciclo de React, ejecutándose después de que `EditorContent.componentDidMount` ha recolocado el DOM del view.
+
+**Edge case — tab switch durante exit de Source Mode**: Si el usuario sale de Source Mode exactamente durante una transición de pestañas (ventana de 50ms de `switchingTab`), el `useLayoutEffect` detecta `switchingTab.current = true` y omite `setContent`. El ref retiene el contenido pendiente. Al ser una combinación extremadamente improbable y de duración limitada (50ms), no se implementó un mecanismo de reintento. Si ocurre, el usuario puede alternar Source Mode nuevamente para aplicar el cambio.
+
+### Decisiones técnicas
+
+| Decisión | Alternativas | Razón |
+|----------|-------------|-------|
+| `useLayoutEffect` sobre `requestAnimationFrame` | `setTimeout(0)` o `rAF` | `useLayoutEffect` es determinista (React lifecycle garantiza que el hijo `componentDidMount` ya se ejecutó). `rAF` introduce ~16ms de latencia con posible flash de contenido previo. |
+| Ref para `activeTabId` sobre `editor.setOptions()` | Llamar a `setOptions()` en cada render con nuevo `onUpdate` | `setOptions()` actualiza el callback pero podría reintroducir bugs de recreación del editor. Ref es mínimo, predecible y no depende de la API interna de TipTap. |
+| Ref `pendingSourceContentRef` sobre estado React | Estado `pendingContent` con `useState` | Estado React causaría un render extra innecesario. Ref es invisible para React y no dispara re-renders. |
+| No incluir `transformPastedText` en P12 | Agregar ahora | La investigación probó que `transformPastedText` NUNCA existió en el códigobase — el paste de texto plano Markdown nunca se convirtió. Agregarlo sería una feature nueva, no una restauración. Se documenta como P13 futuro. |
+
+### Limitaciones conocidas
+
+- **Sin `transformPastedText` (P13)**: El paste de texto plano Markdown (Ctrl+Shift+V) no se convierte automáticamente a HTML. El usuario debe pegar primero y luego usar Source Mode o esperar a P13. Esto NO es una regresión — nunca funcionó en ninguna versión.
+- **Edge case switchingTab + Source Mode**: Si el usuario sale de Source Mode durante los 50ms de `switchingTab`, el contenido no se aplica hasta la próxima alternancia de Source Mode. Probabilidad extremadamente baja.
+
+### Archivos NO modificados
+
+- `useTabs.ts`, `useEditorState.ts`, `useKeyboardShortcuts.ts` — sin cambios
+- `Toolbar.tsx`, `MenuBar.tsx` — sin cambios
+- `markdown.ts`, `tableParser.ts` — sin cambios
+- `extensions/*` — sin cambios
+- `package.json` — sin nuevas dependencias
+
+---
+
+## P13 — Soporte y Corrección del Pegado de Markdown (2026-07-02)
+
+### Estado
+
+✅ **Implementado** (2026-07-02)
+
+### Problema resuelto
+
+Al copiar texto Markdown (como `## Hola`) y pegarlo en el editor WYSIWYG, la aplicación mostraba un bloque de código con el texto literal. Si el usuario removía el bloque de código, el texto `## Hola` se mostraba de manera literal en lugar de renderizarse como un encabezado `H2`. Además, si se pegaba Markdown que no venía de un bloque `<pre>` (por ejemplo, desde un textarea o editor externo), no se convertía a formato enriquecido y se insertaba literalmente.
+
+### Causa raíz
+
+1. **`transformPastedHTML` restrictivo**: El manejador de pegado HTML solo intentaba convertir Markdown si el texto estaba dentro de un elemento `<pre>` sin hijos (`code?.children.length === 0`). Al copiar de fuentes con resaltado de sintaxis (que introducen elementos `<span>`), esta condición fallaba y la app pegaba el HTML del bloque de código original literalmente.
+2. **Inexistencia de `transformPastedText` efectivo**: El hook `transformPastedText` original retornaba HTML (`mdToHtml(text)`), pero ProseMirror lo trataba como texto plano, insertando las etiquetas HTML de forma literal o ignorando el parseado si el portapapeles contenía datos HTML (lo cual ocurre por defecto en la mayoría de navegadores/Electron al copiar texto).
+
+### Solución aplicada
+
+Se reemplazaron `transformPastedHTML` y `transformPastedText` por un único controlador `handlePaste` unificado en `editorProps` (`src/renderer/src/App.tsx`):
+
+1. **Intercepción de eventos de pegado**: `handlePaste` intercepta el evento de pegado en ProseMirror.
+2. **Exclusión de bloques de código**: Si la selección del editor está dentro de un bloque de código (`codeBlock`) o código en línea (`code`), el evento se delega al comportamiento por defecto de TipTap para pegar literalmente.
+3. **Conversión y Renderizado**: Si no está en un bloque de código y el texto plano del portapapeles cumple con la expresión regular de Markdown (`looksLikeMarkdown(text)`), se convierte a HTML usando `mdToHtml(text)` y se inserta mediante `editor.commands.insertContent()`, marcando el evento como manejado (`return true`).
+
+### Archivos modificados
+
+| Archivo | Cambio |
+|---------|--------|
+| `src/renderer/src/App.tsx` | Reemplazo de `transformPastedHTML` y `handlePaste` por un `handlePaste` unificado con detección de Markdown y soporte para inserción enriquecida. |
+
+### Validaciones realizadas
+
+1. ✅ `npx tsc --noEmit` — sin errores de tipos
+2. ✅ `npm run build` — compilación y empaquetado exitoso
+3. ✅ Copiado de `## Hola` de código con spans/highlighting → pegado correcto como `H2` fuera de bloques de código.
+4. ✅ Pegado de Markdown dentro de bloques de código existentes → se pega de forma literal (sin renderizar).
+5. ✅ Pegado de texto plano normal sin sintaxis Markdown → se pega normalmente como texto plano.
+
+### Decisiones técnicas
+
+| Decisión | Alternativas | Razón |
+|----------|-------------|-------|
+| Interceptar en `handlePaste` en lugar de `transformPastedHTML`/`Text` | Continuar parchando los transform hooks | `handlePaste` permite leer directamente el formato de texto plano del portapapeles y decidir si realizar una inserción HTML directa. Esto evita falsos negativos cuando el navegador genera HTML intermedio con estilos al copiar texto. |
+| Excluir `code` y `codeBlock` en el pegado Markdown | Permitir inserción en todo contexto | Pegar encabezados u otros elementos HTML dentro de bloques de código rompería el formato de texto puro requerido para la codificación. |
+
+### Archivos NO modificados
+
+- `useTabs.ts`, `useEditorState.ts`, `useKeyboardShortcuts.ts` — sin cambios
+- `Toolbar.tsx`, `MenuBar.tsx` — sin cambios
+- `markdown.ts`, `tableParser.ts` — sin cambios
+- `extensions/*` — sin cambios
+- `package.json` — sin nuevas dependencias
+
+---
+
+## P14 — Deshabilitación de Barra de Herramientas y Menú Contextual Completo (2026-07-02)
+
+### Estado
+
+✅ **Implementado** (2026-07-02)
+
+### Problema resuelto
+
+1. **Toolbar habilitado sin documento**: Al abrir la aplicación sin pestañas activas (mostrando la pantalla de bienvenida), los botones de formato Markdown y guardado seguían clicables y funcionales. Al no haber editor activo, al hacer clic en ellos no ocurría nada o se disparaban advertencias.
+2. **Falta de menú contextual estándar**: El menú contextual de clic derecho (secundario) solo se mostraba si había una palabra mal escrita para sugerir correcciones. No existían opciones básicas como Cortar, Copiar, Pegar y Seleccionar todo para las áreas editables del documento u otros inputs.
+
+### Implementación
+
+#### 1. Bloqueo de la Barra de Herramientas
+- **Paso de Estado**: En `App.tsx`, se computa la prop `hasActiveDocument={tabs.tabs.length > 0}` y se le pasa a `<Toolbar />`.
+- **Deshabilitación de Botones**: En `Toolbar.tsx`, se recibe la prop `hasActiveDocument` y se asigna el atributo `disabled={!hasActiveDocument}` a todos los botones que requieren un documento activo (H1-H3, negrita, cursiva, listas, cita, código, tabla, guardar, deshacer/rehacer, ver fuente, modo enfoque y mentor markdown).
+- **Control de Hints**: `handleMouseEnter` se salta si `hasActiveDocument` es falso para evitar que se muestren las tarjetas de ayuda de formato.
+- **Estilos Visuales**: Se agregó una regla en `App.css` para `.toolbar-btn:disabled` con opacidad reducida (`0.35`), cursor `not-allowed` y `pointer-events: none` para anular efectos hover y clics.
+
+#### 2. Menú Contextual Completo
+- **Main Process**: En `src/main/index.ts`, se intercepta el evento `'context-menu'` de la ventana.
+- **Items Básicos**: Se agregaron opciones estándar de edición nativas usando los roles internos de Electron:
+  - Cortar (`role: 'cut'`), habilitado según `params.editFlags.canCut`.
+  - Copiar (`role: 'copy'`), habilitado según `params.editFlags.canCopy`.
+  - Pegar (`role: 'paste'`), habilitado según `params.editFlags.canPaste`.
+  - Seleccionar todo (`role: 'selectAll'`), habilitado según `params.editFlags.canSelectAll`.
+- **Integración con Spellcheck**: Si el cursor está en una palabra mal escrita (`params.misspelledWord`), se muestran primero las sugerencias correctoras y las opciones de "Agregar al diccionario" e "Ignorar palabra", seguidas de un separador y los comandos básicos de edición.
+
+#### 3. Atajos Tab / Shift-Tab en Tablas
+- **Tab**: Si el cursor está en la última celda de una tabla, presionar `Tab` añade automáticamente una nueva fila abajo y mueve el foco a la primera celda de esta nueva fila. Si no está en la última celda, navega a la celda siguiente como de costumbre. Si el cursor no está dentro de una tabla, la tecla `Tab` conserva su comportamiento por defecto del navegador (retorna `false` para no interceptar el evento).
+- **Shift-Tab**: Desde cualquier celda de la tabla, presionar `Shift-Tab` inserta un párrafo **debajo** de la tabla y mueve el cursor allí, permitiendo salir de la tabla y continuar escribiendo inmediatamente. Si el cursor no está dentro de una tabla, la tecla no se intercepta.
+
+### Archivos modificados
+
+| Archivo | Cambio |
+|---------|--------|
+| `src/renderer/src/App.tsx` | Envío de `hasActiveDocument` a Toolbar. |
+| `src/renderer/src/components/Toolbar.tsx` | Desestructuración de `hasActiveDocument`, desactivación de botones y omisión de hints. |
+| `src/renderer/src/App.css` | Estilos para `.toolbar-btn:disabled`. |
+| `src/main/index.ts` | Construcción completa del menú contextual con roles estándar de edición nativa integrados con el corrector. |
+| `src/renderer/src/extensions/index.ts` | Modificación de `CustomTable` para implementar atajo `Tab` de creación de fila y refinar `Shift-Tab` para salir de la tabla. |
+
+### Validaciones realizadas
+
+1. ✅ `npm run typecheck` — sin errores de tipos.
+2. ✅ `npm run build` — compilación exitosa.
+3. ✅ Sin pestañas: Guardar, formateadores, undo/redo, mentor, source y focus mode se muestran atenuados y bloqueados. Nuevo documento, Abrir archivo y Abrir carpeta siguen activos.
+4. ✅ Clic derecho en editor: Se despliegan opciones de "Cortar", "Copiar", "Pegar" y "Seleccionar todo" con sus respectivos estados (habilitados/deshabilitados según la selección y contenido del portapapeles).
+5. ✅ Corrector ortográfico: Se integra perfectamente con el menú contextual al hacer clic derecho en palabras con errores.
+6. ✅ Tabulación en tablas: Al presionar `Tab` en la última celda de una tabla, se añade una nueva fila y el cursor se mueve a ella. Presionar `Shift+Tab` desde cualquier celda sale de la tabla insertando un párrafo debajo.
+
+### Decisiones técnicas
+
+| Decisión | Alternativas | Razón |
+|----------|-------------|-------|
+| Usar el evento `'context-menu'` en Electron Main | Implementar menú flotante HTML en el Renderer | Usar el menú contextual nativo de Electron/OS garantiza un comportamiento fluido, rendimiento óptimo, accesibilidad del sistema operativo, y compatibilidad directa con los roles nativos de edición de Chromium sin requerir inyecciones complejas en ProseMirror. |
+| Pointer events desactivados en disabled | Manejar hover con JS | Poner `pointer-events: none` previene de forma nativa que las clases hover de CSS alteren el borde o fondo del botón, y evita tener que evaluar estados booleanos en todos los triggers de mouse. |
+| Validar la presencia de la tabla antes de interceptar `Tab` | Interceptar `Tab` globalmente | Retornar `false` inmediatamente en la extensión si el cursor no está en un nodo `table` permite que la tecla `Tab` siga fluyendo para otras necesidades de accesibilidad del navegador. |
+
+

@@ -19,6 +19,7 @@ interface ToolbarProps {
   showSource: boolean
   focusMode: boolean
   theme: ThemeId
+  hasActiveDocument: boolean
 }
 
 const HINT_DELAY = 2000
@@ -33,7 +34,7 @@ interface HintState {
 export function Toolbar({
   editor, onNew, onOpen, onOpenFolder, onSave, onMentor,
   onToggleSource, onToggleFocus, onToggleTheme, onToggleExplorer,
-  showSource, focusMode, theme
+  showSource, focusMode, theme, hasActiveDocument
 }: ToolbarProps) {
   const [hintState, setHintState] = useState<HintState | null>(null)
   const enterTimer = useRef<ReturnType<typeof setTimeout>>()
@@ -51,6 +52,7 @@ export function Toolbar({
 
   const handleMouseEnter = useCallback((id: string, e: React.MouseEvent<HTMLButtonElement>) => {
     console.log('[DEBUG] handleMouseEnter', id)
+    if (!hasActiveDocument) return
     if (leaveTimer.current) clearTimeout(leaveTimer.current)
     if (hintState?.id === id) { console.log('[DEBUG] already showing same hint', id); return }
 
@@ -70,7 +72,7 @@ export function Toolbar({
         data: { id, type: 'toolbar', data: hint, anchorRect: hintRect.current! }
       })
     }, HINT_DELAY)
-  }, [hintState])
+  }, [hintState, hasActiveDocument])
 
   const handleMouseLeave = useCallback(() => {
     console.log('[DEBUG] handleMouseLeave')
@@ -113,12 +115,12 @@ export function Toolbar({
         <button className="toolbar-btn" onClick={onNew} title="Nuevo (Ctrl+N)">📄</button>
         <button className="toolbar-btn" onClick={onOpen} title="Abrir (Ctrl+O)">📂</button>
         <button className="toolbar-btn" onClick={onOpenFolder} title="Abrir carpeta">📁</button>
-        <button className="toolbar-btn" onClick={onSave} title="Guardar (Ctrl+S)">💾</button>
+        <button className="toolbar-btn" onClick={onSave} title="Guardar (Ctrl+S)" disabled={!hasActiveDocument}>💾</button>
       </div>
       <div className="toolbar-sep" />
       <div className="toolbar-group">
-        <button className="toolbar-btn" onClick={() => editor.chain().focus().undo().run()} title="Deshacer (Ctrl+Z)">↶</button>
-        <button className="toolbar-btn" onClick={() => editor.chain().focus().redo().run()} title="Rehacer (Ctrl+Y)">↷</button>
+        <button className="toolbar-btn" onClick={() => editor.chain().focus().undo().run()} title="Deshacer (Ctrl+Z)" disabled={!hasActiveDocument}>↶</button>
+        <button className="toolbar-btn" onClick={() => editor.chain().focus().redo().run()} title="Rehacer (Ctrl+Y)" disabled={!hasActiveDocument}>↷</button>
       </div>
       <div className="toolbar-sep" />
       <div className="toolbar-group">
@@ -128,6 +130,7 @@ export function Toolbar({
           onMouseEnter={(e) => handleMouseEnter('h1', e)}
           onMouseLeave={handleMouseLeave}
           data-active={editor.isActive('heading', { level: 1 })}
+          disabled={!hasActiveDocument}
         >H1</button>
         <button
           className="toolbar-btn"
@@ -135,6 +138,7 @@ export function Toolbar({
           onMouseEnter={(e) => handleMouseEnter('h2', e)}
           onMouseLeave={handleMouseLeave}
           data-active={editor.isActive('heading', { level: 2 })}
+          disabled={!hasActiveDocument}
         >H2</button>
         <button
           className="toolbar-btn"
@@ -142,6 +146,7 @@ export function Toolbar({
           onMouseEnter={(e) => handleMouseEnter('h3', e)}
           onMouseLeave={handleMouseLeave}
           data-active={editor.isActive('heading', { level: 3 })}
+          disabled={!hasActiveDocument}
         >H3</button>
         <button
           className="toolbar-btn"
@@ -149,6 +154,7 @@ export function Toolbar({
           onMouseEnter={(e) => handleMouseEnter('bold', e)}
           onMouseLeave={handleMouseLeave}
           data-active={editor.isActive('bold')}
+          disabled={!hasActiveDocument}
         ><strong>B</strong></button>
         <button
           className="toolbar-btn"
@@ -156,6 +162,7 @@ export function Toolbar({
           onMouseEnter={(e) => handleMouseEnter('italic', e)}
           onMouseLeave={handleMouseLeave}
           data-active={editor.isActive('italic')}
+          disabled={!hasActiveDocument}
         ><em>I</em></button>
       </div>
       <div className="toolbar-sep" />
@@ -166,6 +173,7 @@ export function Toolbar({
           onMouseEnter={(e) => handleMouseEnter('bulletList', e)}
           onMouseLeave={handleMouseLeave}
           data-active={editor.isActive('bulletList')}
+          disabled={!hasActiveDocument}
         >•</button>
         <button
           className="toolbar-btn"
@@ -173,6 +181,7 @@ export function Toolbar({
           onMouseEnter={(e) => handleMouseEnter('taskList', e)}
           onMouseLeave={handleMouseLeave}
           data-active={editor.isActive('taskList')}
+          disabled={!hasActiveDocument}
         >☑</button>
       </div>
       <div className="toolbar-sep" />
@@ -183,6 +192,7 @@ export function Toolbar({
           onMouseEnter={(e) => handleMouseEnter('blockquote', e)}
           onMouseLeave={handleMouseLeave}
           data-active={editor.isActive('blockquote')}
+          disabled={!hasActiveDocument}
         >❝</button>
         <button
           className="toolbar-btn"
@@ -190,6 +200,7 @@ export function Toolbar({
           onMouseEnter={(e) => handleMouseEnter('codeBlock', e)}
           onMouseLeave={handleMouseLeave}
           data-active={editor.isActive('codeBlock')}
+          disabled={!hasActiveDocument}
         >{'{}'}</button>
         <button
           className="toolbar-btn"
@@ -200,6 +211,7 @@ export function Toolbar({
             openTablePicker(editor, { x, y })
           }}
           title="Insertar tabla"
+          disabled={!hasActiveDocument}
         >⊞</button>
       </div>
       <div className="toolbar-sep" />
@@ -214,12 +226,14 @@ export function Toolbar({
           onClick={onToggleSource}
           data-active={showSource}
           title="Ver Markdown (Ctrl+Shift+M)"
+          disabled={!hasActiveDocument}
         >&lt;&gt;</button>
         <button
           className="toolbar-btn"
           onClick={onToggleFocus}
           data-active={focusMode}
           title="Modo Enfoque (F11)"
+          disabled={!hasActiveDocument}
         >🎯</button>
         <button
           className="toolbar-btn"
@@ -229,7 +243,7 @@ export function Toolbar({
       </div>
       <div className="toolbar-sep" />
       <div className="toolbar-group">
-        <button className="toolbar-btn" onClick={onMentor} title="Mentor Markdown (Ctrl+Shift+P)">🤖</button>
+        <button className="toolbar-btn" onClick={onMentor} title="Mentor Markdown (Ctrl+Shift+P)" disabled={!hasActiveDocument}>🤖</button>
       </div>
       {console.log('[DEBUG] render hintState:', hintState)}
       {hintState && (

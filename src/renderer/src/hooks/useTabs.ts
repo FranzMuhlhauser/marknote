@@ -54,6 +54,7 @@ export function useTabs({
     const ed = editorRef.current
     if (!ed || !activeTabId) return
     const md = showSource ? sourceText : htmlToMd(ed.getHTML())
+    console.log('[P12:SE] syncEditorToTab, activeTabId:', activeTabId, 'showSource:', showSource, 'md length:', md.length, 'md preview:', JSON.stringify(md.slice(0, 200)))
     setTabs(prev => prev.map(t =>
       t.id === activeTabId ? { ...t, content: md, modified: t.modified || md !== t.content } : t
     ))
@@ -63,7 +64,13 @@ export function useTabs({
     const ed = editorRef.current
     if (!ed) return
     switchingTab.current = true
-    ed.commands.setContent(mdToHtml(tab.content))
+    console.log('[P12:LT] loadTabIntoEditor, tab.id:', tab.id, 'content length:', tab.content.length, 'content preview:', JSON.stringify(tab.content.slice(0, 200)))
+    const html = mdToHtml(tab.content)
+    console.log('[P12:LT] about to setContent, html:', JSON.stringify(html))
+    ed.commands.setContent(html)
+    console.log('[P12:LT] after setContent, getHTML:', JSON.stringify(ed.getHTML()))
+    console.log('[P12:LT] after setContent, getJSON:', JSON.stringify(ed.getJSON()))
+    console.log('[P12:LT] after setContent, getText:', JSON.stringify(ed.getText()))
     setSourceText(tab.content)
     setShowSource(false)
     setShowWelcome(false)
@@ -102,10 +109,18 @@ export function useTabs({
   }
 
   const getMarkdown = useCallback(() => {
-    if (showSource) return sourceText
+    if (showSource) {
+      console.log('[P12:GM] showSource=true, returning sourceText length:', sourceText.length)
+      return sourceText
+    }
     const ed = editorRef.current
-    if (!ed) return ''
-    return htmlToMd(ed.getHTML())
+    if (!ed) {
+      console.log('[P12:GM] no editor ref, returning empty')
+      return ''
+    }
+    const result = htmlToMd(ed.getHTML())
+    console.log('[P12:GM] htmlToMd result length:', result.length, 'result preview:', JSON.stringify(result.slice(0, 200)))
+    return result
   }, [showSource, sourceText])
 
   const saveDoc = useCallback(async () => {
@@ -353,10 +368,12 @@ export function useTabs({
     const ed = editorRef.current
     const unsaved = tabs.filter(t => t.modified || !t.filePath)
     if (unsaved.length === 0) {
+      console.log('[P12:CS] closeSaved ALL tabs, clearing content')
       setTabs([])
       setActiveTabId(null)
       setShowWelcome(true)
       ed?.commands.clearContent()
+      console.log('[P12:CS] after clearContent, getHTML:', JSON.stringify(ed?.getHTML()))
     } else {
       setTabs(unsaved)
       if (!unsaved.find(t => t.id === activeTabId)) {

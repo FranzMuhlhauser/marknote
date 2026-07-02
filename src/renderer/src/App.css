@@ -691,6 +691,11 @@ body {
   color: #fff;
   border-color: var(--accent);
 }
+.toolbar-btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+  pointer-events: none;
+}
 
 /* Markdown Hint Card */
 .markdown-hint-card {

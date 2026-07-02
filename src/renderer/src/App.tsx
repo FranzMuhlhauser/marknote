@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useRef } from 'react'
 import { useEditor, EditorContent } from '@tiptap/react'
 import { getExtensions } from './extensions'
 import { Toolbar } from './components/Toolbar'
@@ -40,6 +40,10 @@ function expandToWord(doc: any, pos: number): { from: number; to: number } | nul
   return { from: pos - wordStartRel, to: pos + wordEndRel }
 }
 
+function looksLikeMarkdown(text: string): boolean {
+  return /(?:^|\n)\s*(?:#{1,6}\s|[-*]\s|>\s|\[\s?\]|\d+\.\s+\S|\|.+\||\$\$)/m.test(text)
+}
+
 function App() {
   const ui = useEditorState()
 
@@ -53,14 +57,22 @@ function App() {
     tablePickerEditorRef: ui.tablePickerEditorRef,
   })
 
+  // Refs to avoid stale closures in useEditor callbacks
+  const activeTabIdRef = useRef<string | null>(null)
+  const pendingSourceContentRef = useRef<string | null>(null)
+
   const editor = useEditor({
     extensions: getExtensions(),
     content: '',
     onUpdate: ({ editor: ed }) => {
-      if (tabs.switchingTab.current || !tabs.activeTabId) return
+      if (tabs.switchingTab.current || !activeTabIdRef.current) {
+        console.log('[P12:OU] SKIPPED (switchingTab or no activeTabId)', 'switchingTab:', tabs.switchingTab.current, 'activeTabIdRef:', activeTabIdRef.current)
+        return
+      }
       const md = htmlToMd(ed.getHTML())
+      console.log('[P12:OU] saving, activeTabId:', activeTabIdRef.current, 'md length:', md.length, 'md preview:', JSON.stringify(md.slice(0, 200)))
       tabs.setTabs((prev: any[]) => prev.map((t: any) =>
-        t.id === tabs.activeTabId ? { ...t, content: md, modified: t.modified || md !== t.content } : t
+        t.id === activeTabIdRef.current ? { ...t, content: md, modified: t.modified || md !== t.content } : t
       ))
     },
     editorProps: {
@@ -119,23 +131,28 @@ function App() {
         }
         return false
       },
-      transformPastedHTML: (html) => {
-        const looksLikeMarkdown = (text: string): boolean => {
-          return /(?:^|\n)\s*(?:#{1,6}\s|[-*]\s|>\s|\[\s?\]|\d+\.\s+\S|\|.+\||\$\$)/m.test(text)
+      handlePaste: (view, event) => {
+        const text = event.clipboardData?.getData('text/plain') ?? ''
+        
+        // If pasting inside a code block or inline code, let default behavior handle it literally
+        if (editor?.isActive('codeBlock') || editor?.isActive('code')) {
+          return false
         }
-        const parser = new DOMParser()
-        const doc = parser.parseFromString(html, 'text/html')
-        const pre = doc.body.querySelector('pre')
-        if (!pre) return html
-        const code = pre.querySelector('code')
-        const el = code?.children.length === 0 ? code :
-                   !code && pre.children.length === 0 ? pre : null
-        if (!el) return html
-        const text = el.textContent || ''
-        return looksLikeMarkdown(text) ? mdToHtml(text) : html
+
+        if (looksLikeMarkdown(text)) {
+          const converted = mdToHtml(text)
+          editor?.commands.insertContent(converted)
+          return true
+        }
+        return false
       }
     }
   })
+
+  // Sync activeTabId to ref so onUpdate never captures a stale value
+  useEffect(() => {
+    activeTabIdRef.current = tabs.activeTabId
+  }, [tabs.activeTabId])
 
   // Wire editor ref to useTabs once editor is created
   useEffect(() => {
@@ -248,10 +265,39 @@ function App() {
       ui.setShowSource(true)
       setTimeout(() => ui.sourceRef.current?.focus(), 50)
     } else {
-      editor.commands.setContent(mdToHtml(ui.sourceText))
+      console.log('[P12:TS] toggleSource exit, sourceText:', JSON.stringify(ui.sourceText))
+      const html = mdToHtml(ui.sourceText)
+      console.log('[P12:TS] mdToHtml output length:', html.length)
+
+      // Suppress onUpdate during setContent to avoid round-trip feedback loop
+      const prevActiveId = activeTabIdRef.current
+      activeTabIdRef.current = null
+      editor.commands.setContent(html)
+      activeTabIdRef.current = prevActiveId
+
+      // Save the original markdown (not the round-tripped version from onUpdate)
+      if (prevActiveId) {
+        tabs.setTabs((prev: any[]) => prev.map((t: any) =>
+          t.id === prevActiveId ? { ...t, content: ui.sourceText, modified: true } : t
+        ))
+      }
+
+      pendingSourceContentRef.current = null
       ui.setShowSource(false)
     }
-  }, [editor, ui.showSource, ui.sourceText, tabs.getMarkdown])
+  }, [editor, ui.showSource, ui.sourceText, tabs.getMarkdown, tabs.setTabs, tabs.activeTabId, mdToHtml])
+
+  // Safety net: if toggleSource did not set content (edge case), do it here
+  useLayoutEffect(() => {
+    if (!ui.showSource && pendingSourceContentRef.current !== null) {
+      const content = pendingSourceContentRef.current
+      if (!tabs.switchingTab.current && editor) {
+        pendingSourceContentRef.current = null
+        console.log('[P12:LE] fallback: setContent from pendingSourceContentRef')
+        editor.commands.setContent(mdToHtml(content))
+      }
+    }
+  }, [ui.showSource, editor])
 
   const toggleTheme = useCallback(() => {
     ui.setTheme((prev: any) => {
@@ -339,6 +385,7 @@ function App() {
         showSource={ui.showSource}
         focusMode={ui.focusMode}
         theme={ui.theme}
+        hasActiveDocument={tabs.tabs.length > 0}
       />
 
       <TabBar

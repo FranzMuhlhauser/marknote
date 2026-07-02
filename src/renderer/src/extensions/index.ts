@@ -32,18 +32,28 @@ const lowlight = createLowlight(common)
 const CustomTable = Table.extend({
   addKeyboardShortcuts() {
     return {
-      'Shift-Tab': () => {
-        if (this.editor.commands.goToPreviousCell()) return true
+      'Tab': () => {
         const { state } = this.editor
         const { $anchor } = state.selection
         let d = $anchor.depth
         while (d >= 0 && $anchor.node(d).type.name !== 'table') d--
         if (d < 0) return false
-        const before = $anchor.before(d)
+
+        if (this.editor.commands.goToNextCell()) return true
+        this.editor.chain().focus().addRowAfter().goToNextCell().run()
+        return true
+      },
+      'Shift-Tab': () => {
+        const { state } = this.editor
+        const { $anchor } = state.selection
+        let d = $anchor.depth
+        while (d >= 0 && $anchor.node(d).type.name !== 'table') d--
+        if (d < 0) return false
+        const after = $anchor.after(d)
         this.editor.chain().focus()
           .command(({ tr, dispatch }) => {
-            tr.insert(before, state.schema.nodes.paragraph.create())
-            tr.setSelection(TextSelection.create(tr.doc, before + 1, before + 1))
+            tr.insert(after, state.schema.nodes.paragraph.create())
+            tr.setSelection(TextSelection.create(tr.doc, after + 1, after + 1))
             if (dispatch) dispatch(tr)
             return true
           }).run()

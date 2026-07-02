@@ -45,37 +45,62 @@ function createWindow(): void {
   session.defaultSession.setSpellCheckerLanguages(['es'])
 
   mainWindow.webContents.on('context-menu', (event, params) => {
-    if (!params.misspelledWord) return
     event.preventDefault()
 
     const items: Electron.MenuItemConstructorOptions[] = []
 
-    for (const suggestion of params.dictionarySuggestions.slice(0, 5)) {
+    if (params.misspelledWord) {
+      for (const suggestion of params.dictionarySuggestions.slice(0, 5)) {
+        items.push({
+          label: suggestion,
+          click: () => {
+            mainWindow?.webContents.send('spellcheck:replace-word', suggestion, params.misspelledWord)
+          }
+        })
+      }
+
+      if (params.dictionarySuggestions.length > 0) {
+        items.push({ type: 'separator' })
+      }
+
       items.push({
-        label: suggestion,
+        label: 'Agregar al diccionario',
         click: () => {
-          mainWindow?.webContents.send('spellcheck:replace-word', suggestion, params.misspelledWord)
+          mainWindow?.webContents.send('spellcheck:add-word', params.misspelledWord)
+          session.defaultSession.addWordToSpellCheckerDictionary(params.misspelledWord)
         }
       })
-    }
 
-    if (params.dictionarySuggestions.length > 0) {
+      items.push({
+        label: 'Ignorar palabra',
+        click: () => {
+          session.defaultSession.addWordToSpellCheckerDictionary(params.misspelledWord)
+        }
+      })
+
       items.push({ type: 'separator' })
     }
 
     items.push({
-      label: 'Agregar al diccionario',
-      click: () => {
-        mainWindow?.webContents.send('spellcheck:add-word', params.misspelledWord)
-        session.defaultSession.addWordToSpellCheckerDictionary(params.misspelledWord)
-      }
+      label: 'Cortar',
+      role: 'cut',
+      enabled: params.editFlags.canCut
     })
-
     items.push({
-      label: 'Ignorar palabra',
-      click: () => {
-        session.defaultSession.addWordToSpellCheckerDictionary(params.misspelledWord)
-      }
+      label: 'Copiar',
+      role: 'copy',
+      enabled: params.editFlags.canCopy
+    })
+    items.push({
+      label: 'Pegar',
+      role: 'paste',
+      enabled: params.editFlags.canPaste
+    })
+    items.push({ type: 'separator' })
+    items.push({
+      label: 'Seleccionar todo',
+      role: 'selectAll',
+      enabled: params.editFlags.canSelectAll
     })
 
     const menu = Menu.buildFromTemplate(items)

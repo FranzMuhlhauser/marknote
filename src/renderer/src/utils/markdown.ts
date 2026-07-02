@@ -189,11 +189,17 @@ function preprocessMath(source: string): string {
 }
 
 export function mdToHtml(source: string): string {
-  return md.render(preprocessTaskLists(preprocessMath(source)))
+  console.log('[P12:MD] INPUT:', JSON.stringify(source))
+  const result = md.render(preprocessTaskLists(preprocessMath(source)))
+  console.log('[P12:MD] OUTPUT:', JSON.stringify(result))
+  return result
 }
 
 export function htmlToMd(html: string): string {
-  return turndown.turndown(html)
+  console.log('[P12:HM] INPUT:', JSON.stringify(html))
+  const result = turndown.turndown(html)
+  console.log('[P12:HM] OUTPUT:', JSON.stringify(result))
+  return result
 }
 
 export const DEFAULT_MD = `# Welcome to Marknote
