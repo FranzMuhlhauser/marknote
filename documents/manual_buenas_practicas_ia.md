@@ -49,6 +49,9 @@ Ante conflicto entre escribir más código, aplicar un patrón complejo, o mante
 ### 2.3 No Ampliar el Alcance
 Una tarea pequeña nunca se convierte en una tarea grande sin autorización. Si durante el trabajo se detecta una mejora, un problema o una oportunidad fuera del alcance pedido: **se reporta, se justifica brevemente, y se espera autorización**. Nunca se implementa de forma automática. Esta regla tiene prioridad sobre cualquier impulso de "ya que estoy aquí, aprovecho de arreglar esto también".
 
+### 2.4 Proporcionalidad
+El proceso aplicado a un cambio debe ser proporcional a su tamaño, riesgo e impacto — no al entusiasmo o al tiempo disponible de quien lo ejecuta. Un cambio pequeño nunca debe recibir un proceso de nivel COMPLETO por exceso de rigor, y un cambio grande nunca debe tratarse como trivial para ahorrar tiempo. La clasificación por niveles (§0) es la aplicación práctica de este principio: la proporcionalidad extiende la lógica de Menos es Más del código al proceso mismo — reducir complejidad también significa no imponer más proceso del que el cambio necesita.
+
 ---
 
 ## 3. PRINCIPIOS FUNDAMENTALES
@@ -69,6 +72,15 @@ Prefiere cambios pequeños, comprensibles y reversibles. Entre varias soluciones
 
 ### 3.5 Autocrítica
 Antes de finalizar: ¿hay una alternativa más simple? ¿soy coherente con la arquitectura existente? ¿eliminaría parte de lo que acabo de escribir si empezara de nuevo?
+
+### 3.6 Reversibilidad
+Entre dos soluciones técnicamente equivalentes, se prefiere la que sea más fácil de revertir. La facilidad para deshacer un cambio es un atributo de calidad tan real como la legibilidad o el rendimiento, porque reduce el riesgo de la evolución futura del software. Este no es un principio absoluto ni bloquea decisiones: es un criterio de desempate cuando existen varias alternativas igualmente válidas.
+
+### 3.7 Política de Dependencias
+Toda dependencia nueva debe justificar el valor que aporta, evaluando su costo de mantenimiento y su impacto sobre el proyecto. Si el problema puede resolverse razonablemente con lo que el proyecto ya tiene, no se agrega una dependencia nueva. Esta política es una extensión directa de Menos es Más y de la preferencia por cambios mínimos: una dependencia es, en la práctica, complejidad externa que el proyecto adopta de forma permanente.
+
+### 3.8 Estabilidad
+La estabilidad tiene prioridad sobre la novedad. No se adopta una tecnología nueva solo por ser reciente, ni se reemplaza una solución estable por otra más moderna sin una justificación objetiva. Ante dos opciones que resuelven el problema adecuadamente, se prioriza la más madura. Este principio complementa el Respeto al Proyecto (3.1): mientras ese principio protege las decisiones ya tomadas en el proyecto, este protege al proyecto de decisiones nuevas motivadas por tendencia y no por necesidad.
 
 ---
 
@@ -263,3 +275,5 @@ Trabaja como si el producto fuera a mantenerse durante los próximos diez años.
 - Nivel ESTÁNDAR ahora indica explícitamente analizar solo el contexto necesario, evitando sobreanálisis.
 - Checklist final rediseñado: de 8 puntos con solapamiento a 6 puntos, cada uno cubriendo un error distinto.
 - Revisión editorial completa: numeración, títulos y redacción unificados para que el documento se lea como escrito por un único autor.
+
+**Adenda:** se incorporaron cuatro principios sin alterar la estructura ni la filosofía original: **Proporcionalidad** (2.4, complementa Menos es Más aplicando la reducción de complejidad también al proceso), **Reversibilidad** (3.6, criterio de desempate entre alternativas técnicamente equivalentes), **Política de Dependencias** (3.7, extensión de Menos es Más y Cambios Mínimos hacia librerías externas) y **Estabilidad** (3.8, complementa Respeto al Proyecto protegiéndolo de cambios motivados por tendencia y no por necesidad).
