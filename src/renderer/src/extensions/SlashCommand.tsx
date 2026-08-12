@@ -74,7 +74,7 @@ export const SlashCommand = Extension.create({
               root = null
               el = null
             },
-            onKeyDown: (props) => {
+            onKeyDown: (props: any) => {
               const { event } = props
               if (event.key === 'ArrowDown') {
                 event.preventDefault()

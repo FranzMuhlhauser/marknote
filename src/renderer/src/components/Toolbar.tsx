@@ -2,6 +2,7 @@ import { useState, useRef, useEffect, useCallback } from 'react'
 import type { Editor } from '@tiptap/core'
 import { FORMATTING_HINTS, type ActiveHint } from '../utils/markdownHints'
 import { MarkdownHintCard } from './MarkdownHintCard'
+import { ImageSourcePicker } from './ImageSourcePicker'
 import type { ThemeId } from '../utils/themes'
 import { openTablePicker } from '../utils/tablePicker'
 
@@ -36,9 +37,10 @@ export function Toolbar({
   onToggleSource, onToggleFocus, onToggleTheme, onToggleExplorer,
   showSource, focusMode, theme, hasActiveDocument
 }: ToolbarProps) {
+  const [showImagePicker, setShowImagePicker] = useState(false)
   const [hintState, setHintState] = useState<HintState | null>(null)
-  const enterTimer = useRef<ReturnType<typeof setTimeout>>()
-  const leaveTimer = useRef<ReturnType<typeof setTimeout>>()
+  const enterTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const leaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const activeId = useRef<string | null>(null)
 
   useEffect(() => {
@@ -198,6 +200,17 @@ export function Toolbar({
         <button
           className="toolbar-btn"
           onClick={() => {
+            // Oculta cualquier hint visible para que no quede sobre el diálogo
+            setHintState(null)
+            if (leaveTimer.current) clearTimeout(leaveTimer.current)
+            setShowImagePicker(true)
+          }}
+          title="Insertar imagen (desde mi PC o URL)"
+          disabled={!hasActiveDocument}
+        >🖼️</button>
+        <button
+          className="toolbar-btn"
+          onClick={() => {
             const rect = document.querySelector('.ProseMirror')?.getBoundingClientRect()
             const x = rect ? rect.left + rect.width / 2 : window.innerWidth / 2
             const y = rect ? rect.top + rect.height / 3 : window.innerHeight / 3
@@ -246,6 +259,15 @@ export function Toolbar({
             setHintState(null)
             if (leaveTimer.current) clearTimeout(leaveTimer.current)
           }}
+        />
+      )}
+      {showImagePicker && (
+        <ImageSourcePicker
+          onInsertImage={(src) => {
+            editor.chain().focus().setImage({ src }).run()
+            setShowImagePicker(false)
+          }}
+          onClose={() => setShowImagePicker(false)}
         />
       )}
     </div>

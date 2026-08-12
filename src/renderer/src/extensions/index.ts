@@ -31,7 +31,7 @@ const lowlight = createLowlight(common)
 // persistido como style inline, compatible con HTML y con el markdown-it de export.
 function withCellAlign() {
   return {
-    addAttributes() {
+    addAttributes(this: any) {
       return {
         ...this.parent?.(),
         align: {

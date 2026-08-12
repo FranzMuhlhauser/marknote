@@ -466,8 +466,8 @@ function App() {
           {ui.tableBtnPos && !ui.tableMenuPos && (
             <div
               className="table-menu-btn"
-              style={{ left: ui.tableBtnPos.x, top: ui.tableBtnPos.y }}
-              onClick={() => ui.setTableMenuPos({ x: ui.tableBtnPos.x - 12, y: ui.tableBtnPos.y + 28 })}
+              style={{ left: ui.tableBtnPos?.x ?? 0, top: ui.tableBtnPos?.y ?? 0 }}
+              onClick={() => ui.setTableMenuPos({ x: (ui.tableBtnPos?.x ?? 0) - 12, y: (ui.tableBtnPos?.y ?? 0) + 28 })}
               title="Operaciones de tabla"
             >
               ⊞

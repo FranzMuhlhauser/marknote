@@ -57,7 +57,7 @@ export function Settings({ theme, fontSize, onThemeChange, onFontSizeChange, onC
     root.style.setProperty('--sidebar-bg', customTheme.bg)
     root.style.setProperty('--toolbar-bg', customTheme.bg)
     root.style.setProperty('--titlebar-bg', customTheme.bg)
-    root.style.setAttribute('data-theme', 'custom')
+    root.setAttribute('data-theme', 'custom')
   }
 
   const saveCustomTheme = () => {

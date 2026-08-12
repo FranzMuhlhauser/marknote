@@ -1935,6 +1935,43 @@ body {
   justify-content: flex-end;
 }
 
+/* Image source picker (insertar imagen desde PC o URL) */
+.image-source-box {
+  min-width: 300px;
+}
+
+.image-source-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.image-source-btn {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 10px 14px;
+  font-size: 13px;
+  font-family: inherit;
+  text-align: left;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--text);
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+.image-source-btn:hover {
+  background: var(--hover);
+  border-color: var(--accent);
+}
+
+.image-source-icon {
+  font-size: 16px;
+}
+
 /* Table Context Menu */
 .table-context-menu {
   width: 220px;

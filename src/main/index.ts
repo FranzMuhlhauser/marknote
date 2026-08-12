@@ -122,7 +122,7 @@ function createWindow(): void {
     })
 
     const menu = Menu.buildFromTemplate(items)
-    menu.popup({ window: mainWindow })
+    menu.popup({ window: mainWindow ?? undefined })
   })
 
   if (process.env.ELECTRON_RENDERER_URL) {

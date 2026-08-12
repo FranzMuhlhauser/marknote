@@ -215,7 +215,7 @@ La aplicación sigue un diseño de **3 columnas**:
   - Resaltado de sintaxis via lowlight (compatible con todos los lenguajes comunes)
 
 ### Imágenes
-- **Inserción de imágenes** con selector de archivos nativo o drag & drop
+- **Inserción de imágenes** con selector de archivos nativo, drag & drop, o el botón 🖼️ de la barra de herramientas (diálogo con dos opciones: buscar en el PC o pegar URL de internet)
 - **Redimensionar** con 3 handles de arrastre (esquina SE, borde E, borde S)
 - **Alinear** izquierda/centro/derecha con toolbar flotante
 - **Texto alternativo** (alt): doble click sobre la imagen o botón en toolbar
@@ -467,7 +467,7 @@ El script `scripts/release.ps1` automatiza los pasos 4-5. Requiere `gh` CLI aute
 
 | Versión | Fecha | Cambios |
 |---|---|---|
-| v0.1.6 (fix imágenes) | 2026-08-12 | **Fix inserción de imágenes por sintaxis Markdown** `![alt](ruta)` (bug: quedaba como texto): input rule en ResizableImage, detección en pegado (`handlePaste` inserta el nodo directo, saltando markdown-it/DOMPurify que eliminan rutas locales), nuevo IPC `file:readImage` que resuelve rutas locales/`file://`/relativas a data URL en el editor, atributo `title` en el nodo |
+| v0.1.6 (fix imágenes) | 2026-08-12 | **Fix inserción de imágenes por sintaxis Markdown** `![alt](ruta)` (bug: quedaba como texto): input rule en ResizableImage, detección en pegado (`handlePaste` inserta el nodo directo, saltando markdown-it/DOMPurify que eliminan rutas locales), nuevo IPC `file:readImage` que resuelve rutas locales/`file://`/relativas a data URL en el editor, atributo `title` en el nodo · **Botón 🖼️ en la barra de herramientas**: diálogo `ImageSourcePicker` con dos opciones — buscar imagen en el PC (data URL) o pegar URL de internet; cierra con Escape y limpia hints visibles |
 | v0.1.6 | 2026-08 | Fix bug copiar/pegar, cambios en la barra inicial, Tab en tabla crea fila nueva si es la última celda, Shift+Tab sale de la tabla |
 | v0.1.6 (fixes auditoría) | 2026-08-12 | **Fase 1** (altos): posiciones reales en Búsqueda/Reemplazo (`doc.descendants`), `file:duplicate` sin bucle infinito (límite 100 + `COPYFILE_EXCL`), validación de rutas en IPC de archivos (`authorizedPaths` + workspace, canal `paths:seed`) · **Fase 2** (medios): CSP en producción + DOMPurify en `mdToHtml`, errores de guardado (`performSave`, IPC devuelve `{ok,error}`), debounce de `htmlToMd` en `onUpdate`, F11 = Modo Enfoque en UI, atajos inexistentes removidos de la paleta, script `lint` eliminado · **Fase 3** (limpieza): `lang="es"` en index.html, dead code (`pendingSourceContentRef`, `DEFAULT_MD`, `markdownHintSeen/MarkSeen`, re-export `tableSortKey`, param `setShowWelcome`), CSS muerto (`.math-error`), `createTableNode` sin export, devDeps `@types/katex` (katex trae sus tipos) y `png-to-ico` (doc: "no usar") eliminadas · **Fase 4** (DRY): `utils/video.ts` (regex de YouTube único, antes duplicado en VideoBlock y SlashCommand), `utils/fileUtils.ts` (FileReader/selector de imagen compartidos en SlashCommand, CommandPalette y drag&drop), factoría `withCellAlign()` (unifica TableCell/TableHeader), módulo `src/main/paths.ts` (validación de rutas extraída de `index.ts`) |
 | v0.1.5 | 2026-07 | **Refactor App.tsx → 3 hooks** (useTabs, useEditorState, useKeyboardShortcuts), importar CSV/TSV como tablas Markdown, convertir datos a tabla + pegado Excel/Sheets, alineación visual de columnas, mejoramiento de tablas, fix KaTeX, pegado ChatGPT, tab bar UX + contraste |

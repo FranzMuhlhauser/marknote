@@ -25,6 +25,7 @@ interface FileAPI {
   duplicate: (filePath: string) => Promise<string>
   deleteFile: (filePath: string) => Promise<void>
   moveFile: (oldPath: string, newPath: string) => Promise<void>
+  onOpenFile: (callback: (filePath: string) => void) => void
   getStartupFile: () => Promise<string | null>
   seedPaths: (paths: string[]) => Promise<void>
   addCustomWord: (word: string) => Promise<void>

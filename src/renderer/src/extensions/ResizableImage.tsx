@@ -2,6 +2,17 @@ import { Node, mergeAttributes, InputRule } from '@tiptap/core'
 import { NodeViewWrapper, ReactNodeViewRenderer } from '@tiptap/react'
 import { useCallback, useRef, useState, useEffect } from 'react'
 
+// Declara el comando setImage en la interface Commands (patrón del core: objeto
+// anidado bajo el nombre del nodo, que es lo que KeysWithTypeOf<Commands, object>
+// extrae). Sin esta augmentación, tsc rechaza editor.chain().focus().setImage(...).
+declare module '@tiptap/core' {
+  interface Commands<ReturnType> {
+    image: {
+      setImage: (options: { src: string; alt?: string; title?: string }) => ReturnType
+    }
+  }
+}
+
 export const ResizableImage = Node.create({
   name: 'image',
   group: 'block',
@@ -33,6 +44,19 @@ export const ResizableImage = Node.create({
 
   addNodeView() {
     return ReactNodeViewRenderer(ImageComponent)
+  },
+
+  // Registra el comando setImage (como @tiptap/extension-image). Sin esto,
+  // editor.chain().focus().setImage(...) no hace nada: el core solo registra
+  // los comandos que cada extensión define explícitamente con addCommands().
+  addCommands() {
+    return {
+      setImage: (options: { src: string; alt?: string; title?: string }) => ({ commands }) => {
+        const attrs: Record<string, string> = { src: options.src, alt: options.alt || '' }
+        if (options.title) attrs.title = options.title
+        return commands.insertContent({ type: this.name, attrs })
+      },
+    }
   },
 
   addInputRules() {

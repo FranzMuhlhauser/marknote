@@ -51,7 +51,7 @@ function CodeBlockComponent({ node, updateAttributes, extension }: any) {
     updateAttributes({ language: e.target.value || null })
   }, [updateAttributes])
 
-  const lines = node.textContent.split('\n')
+  const lines: string[] = node.textContent.split('\n')
 
   return (
     <NodeViewWrapper className={`code-block-wrapper ${collapsed ? 'collapsed' : ''}`}>
