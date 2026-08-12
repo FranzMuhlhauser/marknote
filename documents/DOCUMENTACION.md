@@ -7,16 +7,22 @@ Construido con Electron + Vite + React 19 + TypeScript + TipTap.
 
 ## Stack Tecnológico
 
-| Componente | Tecnología |
+> **Nota de verificación**: Esta tabla fue contrastada contra `package.json` (v0.1.6) y el código fuente en 2026-08-12.
+
+| Componente | Tecnología (versión real) |
 |---|---|
-| Frontend | React 19, TypeScript, Vite 5 |
-| Editor | TipTap 2.x (ProseMirror) |
-| Backend | Electron 33 (main process) |
-| Build | electron-vite, electron-builder |
-| Markdown | markdown-it, Turndown |
-| Math | KaTeX |
-| Diagrams | Mermaid |
-| Export PDF | html2canvas + jsPDF |
+| Frontend | React 19.0.0, TypeScript 5.7.3, Vite 5.x |
+| Editor | TipTap 2.11–2.27 (@tiptap/core, @tiptap/pm, @tiptap/react) |
+| Backend | Electron 33.3.1 (main process) |
+| Build | electron-vite 2.3.0, electron-builder 26.15.3 |
+| Markdown | markdown-it 14.2.0 (solo `html/linkify/typographer`, sin plugins extra), Turndown 7.2.4 |
+| Math | KaTeX 0.17.0 |
+| Diagrams | Mermaid 11.15.0 |
+| Syntax highlight | lowlight 3.3.0 |
+| Export PDF | html2canvas 1.4.1 + jsPDF 4.2.1 |
+| Updates | electron-updater 6.8.9 |
+| Iconografía | ~~lucide-react~~ — **removida de package.json en 2026-08-12** (no se importaba en ningún archivo; la Toolbar usa texto/emojis) |
+| Icons de app | png2icons + png-to-ico (dev) |
 
 ---
 
@@ -46,25 +52,34 @@ npm run typecheck     # npx tsc --noEmit (verificación de tipos)
 marknote/
 ├── src/
 │   ├── main/
-│   │   └── index.ts              # Proceso principal de Electron (IPC handlers, ventana)
+│   │   ├── index.ts              # Proceso principal de Electron (IPC handlers, ventana)
+│   │   └── paths.ts              # Validación de rutas autorizadas + workspace
 │   ├── preload/
 │   │   └── index.ts              # Bridge de comunicación (contextBridge + ipcRenderer)
 │   └── renderer/
 │       └── src/
-│           ├── App.tsx           # Componente principal (editor, menú, sidebars, lógica general)
-│           ├── App.css           # Estilos globales (~1400 líneas, 6 temas, todos los componentes)
+│           ├── App.tsx           # Componente principal (editor, layout, integración de hooks)
+│           ├── App.css           # Estilos globales (6 temas, todos los componentes)
 │           ├── env.d.ts          # Tipos globales (Window.api, etc.)
+│           ├── hooks/            # Estado extraído de App.tsx (refactor v0.1.5)
+│           │   ├── useEditorState.ts      # Tema, fuente, paneles, workspace, confirmaciones
+│           │   ├── useTabs.ts             # TabDoc[], apertura/guardado/cierre de pestañas
+│           │   └── useKeyboardShortcuts.ts # Atajos globales + guardado al salir (beforeunload)
 │           ├── extensions/
-│           │   ├── index.ts          # Configuración de extensiones TipTap
+│           │   ├── index.ts          # Configuración de extensiones TipTap (getExtensions)
 │           │   ├── MathInline.tsx     # Nodo de fórmula matemática inline (KaTeX)
 │           │   ├── MathBlock.tsx      # Nodo de bloque matemático (KaTeX)
 │           │   ├── MermaidBlock.tsx   # Nodo de diagrama Mermaid
 │           │   ├── CurrentLineHighlight.ts  # Plugin de resaltado de línea actual
 │           │   ├── CodeBlock.tsx      # Bloque de código con copiar/colapsar (lowlight)
-│           │   └── ResizableImage.tsx # Imagen con redimensionar, alinear y texto alternativo
+│           │   ├── ResizableImage.tsx # Imagen con redimensionar, alinear y texto alternativo
+│           │   ├── VideoBlock.tsx     # Video embebido (YouTube/URL)
+│           │   ├── SlashCommand.tsx   # Menú emergente al tipear /
+│           │   ├── BoldItalic.ts      # Regla para ***text*** (bold + italic)
+│           │   └── TableSort.ts       # Plugin de ordenamiento de tablas
 │           ├── components/
-│           │   ├── MenuBar.tsx        # Barra de menú (Archivo, Editar, Ver, Ayuda)
-│           │   ├── Toolbar.tsx        # Barra de herramientas (formato, inserción, vista)
+│           │   ├── MenuBar.tsx        # Barra unificada (título + Archivo, Editar, Ver, Ayuda)
+│           │   ├── Toolbar.tsx        # Barra de herramientas (texto/emojis + hints educativos)
 │           │   ├── TabBar.tsx         # Pestañas con arrastre y menú contextual
 │           │   ├── FileExplorer.tsx   # Explorador de archivos con operaciones avanzadas
 │           │   ├── SearchReplace.tsx  # Búsqueda y reemplazo
@@ -72,15 +87,28 @@ marknote/
 │           │   ├── Outline.tsx        # Esquema/índice del documento (H1-H3)
 │           │   ├── Stats.tsx          # Estadísticas del documento
 │           │   ├── StatusBar.tsx      # Barra de estado inferior
-│           │   ├── Settings.tsx       # Panel de configuración (temas, plugins, atajos)
+│           │   ├── Settings.tsx       # Panel de configuración (temas, plugins, atajos, diccionario)
 │           │   ├── WelcomeScreen.tsx  # Pantalla de bienvenida
 │           │   ├── OnboardingModal.tsx # Guía interactiva de 7 pasos (primera ejecución)
+│           │   ├── MentorModal.tsx    # Explorador educativo de sintaxis Markdown
+│           │   ├── MarkdownHintCard.tsx # Tarjeta educativa al hacer hover en botones
 │           │   ├── TableContextMenu.tsx # Menú contextual para tablas
+│           │   ├── TableSizePicker.tsx  # Selector visual de filas × columnas
+│           │   └── ConfirmDialog.tsx    # Diálogo de confirmación (guardar/descartar/cancelar)
+│           ├── knowledge/
+│           │   └── index.ts        # 12 temas educativos de Markdown (Mentor)
 │           └── utils/
 │               ├── markdown.ts     # Conversión MD ↔ HTML (markdown-it + Turndown)
 │               ├── export.ts       # Exportación HTML y PDF
 │               ├── stats.ts        # Cálculo de estadísticas del documento
-│               └── themes.ts       # Gestión de temas (6 predefinidos + personalizado)
+│               ├── themes.ts       # Gestión de temas (6 predefinidos + personalizado)
+│               ├── customDictionary.ts # Diccionario personalizado (localStorage)
+│               ├── markdownHints.ts    # Datos de los hints educativos
+│               ├── tableParser.ts      # CSV/TSV → tabla Markdown + pegado Excel/Sheets
+│               ├── tablePicker.ts      # Selector de tamaño de tabla
+│               ├── prompt.ts           # Utilidades de prompts
+│               ├── video.ts            # Parsing de URLs de video (YouTube/directa)
+│               └── fileUtils.ts        # Lectura de archivos por FileReader (imagen/CSV)
 ├── resources/
 │   ├── icon.png                 # Ícono de la aplicación
 │   └── icon.ico                 # Ícono para Windows
@@ -140,7 +168,7 @@ La aplicación sigue un diseño de **3 columnas**:
 ### Layout y Navegación
 - **Layout 3 columnas**: Explorador izquierdo (240px) + Editor central + Índice derecho (Outline)
 - **Barra de menú unificada** (TitleBar + Menú): muestra título del documento + indicador de modificado + menús Archivo, Editar, Ver, Ayuda — todos con atajos de teclado. Incluye botón de actualización cuando hay nueva versión. La zona del título funciona como agarre para arrastrar la ventana. Los comandos de inserción (tabla, imagen, video, etc.) se acceden desde la barra de herramientas, la paleta de comandos (Ctrl+Shift+P) o el menú slash (/).
-- **Barra de herramientas** agrupada en 6 categorías: Archivo, Edición, Formato, Estructura, Contenido, Vista. Se quitó el botón de pantalla completa del toolbar; el toggle vista fuente se movió al toolbar
+- **Barra de herramientas** agrupada en grupos de texto/emojis: Archivo (📄 📂 📁 💾), Edición (↶ ↷), Formato (H1 H2 H3 B I), Listas (• ☑), Bloques (❝ {} ⊞), Vista (🗂 <> 🎯 🌙) y Mentor (🤖). Los botones de formato muestran tarjetas educativas al hacer hover
 - **Sistema de pestañas** (TabBar) con soporte para múltiples documentos abiertos simultáneamente
 - **Reordenar pestañas** por arrastrar y soltar (HTML5 DnD), con indicador visual de posición
 - **Menú contextual en pestañas**: clic derecho permite Cerrar, Cerrar otros, Cerrar a la derecha, Cerrar todos, Cerrar guardados
@@ -271,9 +299,10 @@ La aplicación sigue un diseño de **3 columnas**:
 - Navegación clickeable a cada sección
 
 ### Pantalla Completa
-- Atajo F11 (integrado con IPC Electron)
-- Toggle desde menú Ver o botón ⛶ en toolbar
+- Toggle desde menú **Ver > Pantalla completa** (IPC `window:toggleFullscreen`)
 - Ventana sin bordes del sistema operativo
+
+> **Corrección**: F11 ya no activa pantalla completa — activa el **Modo Enfoque** (ver sección Modo Enfoque).
 
 ### Configuración
 - Panel modal accesible desde menú Archivo > Configuración o botón ⚙ en toolbar
@@ -312,20 +341,23 @@ La aplicación sigue un diseño de **3 columnas**:
 | Canal | Descripción |
 |---|---|
 | `dialog:open` | Abre diálogo para seleccionar archivo .md |
-| `dialog:save` | Guarda archivo (con diálogo si no hay ruta) |
+| `dialog:openCsv` | Abre diálogo para seleccionar archivo CSV/TSV (importar como tabla) |
+| `dialog:save` | Guarda archivo (con diálogo si no hay ruta). Devuelve `{ ok, path?, error? }`, o `null` si el usuario cancela; un fallo de escritura se informa al renderer (no se lanza) |
 | `dialog:openFolder` | Abre diálogo para seleccionar carpeta |
 | `folder:listFiles` | Lista archivos .md recursivamente en una carpeta |
 | `file:read` | Lee contenido de un archivo |
-| `file:write` | Escribe contenido en un archivo |
+| `file:write` | Escribe contenido en un archivo. Devuelve `{ ok, error? }` (los fallos se informan, no se lanzan) |
 | `file:createFolder` | Crea una carpeta |
 | `file:rename` | Renombra un archivo/carpeta |
 | `file:duplicate` | Duplica un archivo (copia numerada) |
 | `file:delete` | Elimina un archivo |
 | `file:move` | Mueve un archivo a otra ubicación |
+| `paths:seed` | Registra como autorizadas las rutas `.md` conocidas del usuario (favoritos/recientes/papelera) al iniciar, para no romper eliminar/renombrar sin abrir |
 | `update:startDownload` | Inicia descarga de nueva versión (electron-updater) |
 | `update:install` | Reinicia e instala la actualización descargada |
-| `window:toggleFullscreen` | Alterna pantalla completa |
+| `window:toggleFullscreen` | Alterna pantalla completa (menú Ver) |
 | `app:quit` | Cierra la aplicación |
+| `app:getStartupFile` | Devuelve el archivo .md recibido al iniciar (segunda instancia / línea de comandos / asociación) |
 | `spellcheck:addWord` | Agrega una palabra al diccionario personalizado del spell checker |
 | `spellcheck:removeWord` | Elimina una palabra del diccionario personalizado |
 | `spellcheck:addWords` | Agrega múltiples palabras en lote (usado al iniciar) |
@@ -345,20 +377,26 @@ La aplicación sigue un diseño de **3 columnas**:
 
 | Extensión | Propósito |
 |---|---|
-| StarterKit | Base del editor (párrafos, encabezados, listas, history, etc.) |
-| Placeholder | Texto placeholder "Start writing..." |
+| StarterKit | Base del editor (párrafos, encabezados 1-6, listas, history depth 100, codeBlock deshabilitado) |
+| Placeholder | Texto placeholder "Empieza a escribir..." |
 | Underline | Formato subrayado |
-| Link | Enlaces clicables |
+| Link | Enlaces clicables (`openOnClick: false`) |
 | Typography | Reemplazos tipográficos (comillas, guiones, etc.) |
-| TaskList + TaskItem | Listas de tareas con checkbox |
-| Table + TableRow + TableCell + TableHeader | Tablas completas con resize |
+| TaskList + TaskItem | Listas de tareas con checkbox; TaskItem extendido con input rule para `- [ ]` |
+| Table + TableRow + TableCell + TableHeader | Tablas (resize desactivado, sort por click removido); atajos Tab/Shift+Tab para navegar y salir |
 | Highlight | Resaltado de texto |
-| TextAlign | Alineación de párrafos |
+| TextAlign | Alineación de párrafos y encabezados |
 | CodeBlock (custom) | Bloques de código con lowlight, copiar y colapsar |
 | ResizableImage (custom) | Imágenes con redimensionar, alinear y alt text |
 | MathInline + MathBlock (custom) | Fórmulas KaTeX inline y en bloque |
 | MermaidBlock (custom) | Diagramas Mermaid |
 | CurrentLineHighlight (custom) | Resaltado de la línea activa en el editor |
+| VideoBlock (custom) | Video embebido (YouTube/URL) con redimensionar y alinear |
+| TableSort (custom) | Plugin de decoraciones para indicador de ordenamiento en tablas |
+| BoldItalic (custom) | Regla de entrada/salida para `***text***` (bold + italic) |
+| SlashCommand (custom) | Menú emergente al tipear `/` con opciones de inserción |
+
+> La tabla completa y actualizada está en la sección "Extensiones TipTap (Completas)" más abajo.
 
 ---
 
@@ -368,6 +406,7 @@ La aplicación sigue un diseño de **3 columnas**:
 |---|---|
 | Ctrl+N | Nuevo documento |
 | Ctrl+O | Abrir archivo |
+| Ctrl+Shift+O | Abrir carpeta (workspace) |
 | Ctrl+S | Guardar |
 | Ctrl+Shift+S | Guardar como |
 | Ctrl+W | Cerrar pestaña activa |
@@ -380,12 +419,14 @@ La aplicación sigue un diseño de **3 columnas**:
 | Ctrl+B | Negrita |
 | Ctrl+I | Cursiva |
 | Ctrl+U | Subrayado |
-| Ctrl+Alt+1/2/3 | Encabezado H1/H2/H3 |
+| Ctrl+Shift+M | Alternar vista fuente Markdown |
 | F9 | Explorador de archivos |
-| F11 | Pantalla completa |
+| F11 | Modo Enfoque |
 | Escape | Cerrar diálogos y menús contextuales; salir de vista fuente |
 | Tab (en tabla) | Siguiente celda; si es la última, añade nueva fila |
 | Shift+Tab (en tabla) | Salir de la tabla (inserta párrafo debajo) |
+
+> Encabezados H1-H3 se aplican desde la barra de herramientas, la paleta de comandos o el menú slash — **no hay atajo de teclado dedicado** (Ctrl+Alt+1/2/3 y Ctrl+1/2/3 documentados antes no existen en el código).
 
 ---
 
@@ -425,15 +466,52 @@ El script `scripts/release.ps1` automatiza los pasos 4-5. Requiere `gh` CLI aute
 
 | Versión | Fecha | Cambios |
 |---|---|---|
-| v0.3.0 | 2026-06-18 | TitleBar+MenuBar unificados, editor 960px + padding ampliado, Outline mejorado, WelcomeScreen con atajos, StatusBar fijo "WYSIWYG" + "Columna", Ctrl+H/W/Tab, resaltado de búsqueda con decoraciones ProseMirror, replaceAll transaccional, focus-mode en Stats + fix clase duplicada, hover con color-mix, vista fuente consistente, 8 variables CSS, sidebars responsives, menú contextual clamp, errores en explorador, Escape→source view, fix shortcut Negrita Ctrl+N→Ctrl+B, transiciones, scrollbars, :focus-visible, actualización automática con electron-updater (descarga + progreso + reinicio) |
-| v0.2.0 | 2026-06-18 | Menú contextual tablas, bloques código copiar/colapsar, imágenes redimensionar/alinear/alt, explorador avanzado (crear, renombrar, duplicar, eliminar, arrastrar), temas personalizados, sección plugins, traducción completa a español, reordenar pestañas, menú contextual pestañas |
+| v0.1.6 | 2026-08 | Fix bug copiar/pegar, cambios en la barra inicial, Tab en tabla crea fila nueva si es la última celda, Shift+Tab sale de la tabla |
+| v0.1.6 (fixes auditoría) | 2026-08-12 | **Fase 1** (altos): posiciones reales en Búsqueda/Reemplazo (`doc.descendants`), `file:duplicate` sin bucle infinito (límite 100 + `COPYFILE_EXCL`), validación de rutas en IPC de archivos (`authorizedPaths` + workspace, canal `paths:seed`) · **Fase 2** (medios): CSP en producción + DOMPurify en `mdToHtml`, errores de guardado (`performSave`, IPC devuelve `{ok,error}`), debounce de `htmlToMd` en `onUpdate`, F11 = Modo Enfoque en UI, atajos inexistentes removidos de la paleta, script `lint` eliminado · **Fase 3** (limpieza): `lang="es"` en index.html, dead code (`pendingSourceContentRef`, `DEFAULT_MD`, `markdownHintSeen/MarkSeen`, re-export `tableSortKey`, param `setShowWelcome`), CSS muerto (`.math-error`), `createTableNode` sin export, devDeps `@types/katex` (katex trae sus tipos) y `png-to-ico` (doc: "no usar") eliminadas · **Fase 4** (DRY): `utils/video.ts` (regex de YouTube único, antes duplicado en VideoBlock y SlashCommand), `utils/fileUtils.ts` (FileReader/selector de imagen compartidos en SlashCommand, CommandPalette y drag&drop), factoría `withCellAlign()` (unifica TableCell/TableHeader), módulo `src/main/paths.ts` (validación de rutas extraída de `index.ts`) |
+| v0.1.5 | 2026-07 | **Refactor App.tsx → 3 hooks** (useTabs, useEditorState, useKeyboardShortcuts), importar CSV/TSV como tablas Markdown, convertir datos a tabla + pegado Excel/Sheets, alineación visual de columnas, mejoramiento de tablas, fix KaTeX, pegado ChatGPT, tab bar UX + contraste |
 | v0.1.4 | 2026-06-24 | Diccionario personalizado (localStorage), menú contextual ortografía (Menu nativo + IPC + expandToWord), autocompletado descartado, .md file association en instalador NSIS |
+| v0.1.3 | 2026-06-24 | Fix checkbox en checklists (alineación vertical), fixes de hints educativos y explorador |
+| v0.1.2 | 2026-06-22 | Simplificación de interfaz (toolbar con texto/emojis), sistema de hints educativos (MarkdownHintCard), Mentor Markdown (knowledge/), fix checklists `- [ ]`, fixes electron-updater packaging |
 | v0.1.1 | 2026-06-18 | Nuevo doc en blanco, fix open file |
 | v0.1.0 | 2026-06-18 | Versión inicial: editor WYSIWYG, tablas, KaTeX, Mermaid, export, file explorer, source view |
-| v0.3.1 | 2026-06-19 | Corrección flushSync (closeTab, closeOthers, closeRight, closeSaved), Table resize desactivado (`resizable: false`), Table header sort removido, SlashCommand y VideoBlock agregados, TableSizePicker, BoldItalic, TableSort, single instance lock, file association, markdown-it plugins extendidos, DEFAULT_MD template, docs actualizadas |
-| v0.3.4 | 2026-06-24 | Menú contextual de corrección ortográfica con sugerencias Hunspell, "Agregar al diccionario" e "Ignorar palabra" vía Menu nativo de Electron + IPC, expandToWord helper para reemplazo en ProseMirror |
-| v0.3.3 | 2026-06-24 | Diccionario personalizado de corrección ortográfica (localStorage + Electron spellchecker API), UI en Configuración, registro automático al iniciar, customDictionary.ts, estilos CSS para diccionario |
-| v0.3.2 | 2026-06-24 | Guía de Onboarding interactiva (7 pasos), localStorage persistencia, menú Ayuda > Ver guía nuevamente, OnboardingModal.tsx, estilos minimalistas, decisiones arquitectónicas documentadas |
+
+> **Nota sobre numeración**: Las versiones internas v0.2.0 y v0.3.x usadas en documentación previa **nunca existieron en `package.json`** (que siempre usó v0.1.x). Las funcionalidades listadas bajo esos números (menú contextual de tablas, bloques de código con copiar/colapsar, imágenes redimensionables, onboarding, temas, spellcheck, etc.) fueron publicadas realmente entre **v0.1.2 y v0.1.4**. El historial arriba refleja los cambios reales por commit de git.
+
+---
+
+## Auditoría de Código 2026-08-12 — Fase 2: Verificación
+
+Auditoría realizada con la skill `code-audit-pro` (3 hallazgos 🟠 altos → Fase 1, ya aplicados; 7 ítems 🟡 medios → Fase 2). Validación: `npm run typecheck` ✅ + `npx electron-vite build` ✅ + revisión crítica de código ✅ (hallazgos del revisor corregidos: flujos de cierre abortan si el guardado falla, `modified:true` síncrono en `onUpdate`).
+
+| # | Ítem | Cambio aplicado | Archivos | Estado |
+|---|---|---|---|---|
+| 4 | CSP + sanitización de HTML | CSP estricta en producción vía `session.defaultSession.webRequest.onHeadersReceived` (`default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' file: data: blob: https:; font-src 'self' data:; frame-src 'self' https:`). No se aplica en dev (Vite/HMR necesita scripts inline). `DOMPurify.sanitize()` en `mdToHtml`: todo HTML generado desde Markdown se sanea antes de entrar al editor (neutraliza `<script>`, `onerror`, `javascript:`). | `src/main/index.ts`, `src/renderer/src/utils/markdown.ts`, `package.json` (`dompurify ^3.4.13`) | ✅ |
+| 5 | Errores de guardado (pérdida de datos) | `dialog:save`/`file:write` devuelven `{ ok, path?, error? }` en vez de lanzar. Solo se marca `modified:false` si la escritura tuvo éxito; toast con el error en caso contrario. Los flujos de cierre (`closeTab`/`closeOthers`/`closeAll`/`closeRight`) **abortan si el guardado falla** — la pestaña no se cierra si su contenido no llegó a disco. `beforeunload` no sale de la app si un guardado falla. | `src/main/index.ts`, `src/renderer/src/hooks/useTabs.ts`, `src/renderer/src/hooks/useKeyboardShortcuts.ts`, `src/renderer/src/env.d.ts` | ✅ |
+| 6 | Helper de guardado unificado | Nuevo `performSave(tab, text, isActive)` en `useTabs` centraliza los 6 puntos de guardado duplicados (saveDoc, saveAsDoc, saveUnsavedTab, newDoc, openDoc, openFileFromExplorer, beforeunload); `saveUnsavedTab` retorna `boolean`. | `src/renderer/src/hooks/useTabs.ts`, `src/renderer/src/hooks/useKeyboardShortcuts.ts` | ✅ |
+| 7 | Etiquetas F11 | F11 = **Modo Enfoque** en `MenuBar` (la opción "Pantalla Completa" ya no muestra F11, que activa foco y no fullscreen), tip de `WelcomeScreen` y paso 6 del `OnboardingModal` corregidos. | `MenuBar.tsx`, `WelcomeScreen.tsx`, `OnboardingModal.tsx` | ✅ |
+| 8 | Atajos inexistentes en paleta | Eliminados `Ctrl+Alt+1/2/3` de Encabezados 1-3 en `CommandPalette` (no existen en `useKeyboardShortcuts`). | `CommandPalette.tsx` | ✅ |
+| 9 | Script `lint` roto | Eliminado `"lint": "eslint . --ext .ts,.tsx"` de `package.json` — eslint no es dependencia y no hay config en el repo (evidencia 🟢: `glob *eslint*` → 0 resultados). | `package.json` | ✅ |
+| 10 | Debounce de `htmlToMd` | `onUpdate` marca `modified:true` **síncronamente** (el diálogo de salida depende de ese flag — evita ventana de 250ms con pérdida de ediciones al cerrar/salir) y difiere 250ms solo el snapshot de `content`, con guard de cambio de pestaña. | `src/renderer/src/App.tsx` | ✅ |
+
+### Fase 3 — Limpieza general (verificación)
+
+| Ítem | Cambio aplicado | Archivos | Estado |
+|---|---|---|---|
+| `lang` del documento | `index.html`: `lang="en"` → `lang="es"` (discrepancia #5 de la tabla de Diferencias) | `src/renderer/index.html` | ✅ |
+| Dead code | Removidos: ref `pendingSourceContentRef` + safety-net `useLayoutEffect` (nunca se seteaba a un valor), constante `DEFAULT_MD` (sin importadores, knip 🟢), `markdownHintSeen`/`markdownHintMarkSeen` (sin llamadores), re-export `tableSortKey` en `extensions/index.ts`, parámetro `setShowWelcome` en `useKeyboardShortcuts` | `App.tsx`, `utils/markdown.ts`, `utils/markdownHints.ts`, `extensions/index.ts`, `hooks/useKeyboardShortcuts.ts` | ✅ |
+| CSS muerto | Removido `.math-error` (sin uso; KaTeX emite `.katex-error`). Se conservan: `align-*` (aplicadas por `ResizableImage`/`VideoBlock` como `align-${align}`), `is-editor-empty` (Placeholder), `selectedCell` (Table), `ProseMirror-selectednode` (ProseMirror core) y `drop-before/after` (TabBar) — falsos positivos del análisis mecánico | `App.css` | ✅ |
+| Export innecesario | `createTableNode` deja de exportarse (uso solo interno en `tableParser.ts`) | `utils/tableParser.ts` | ✅ |
+| Dependencia redundante | `@types/katex` eliminada de devDeps — katex 0.17 trae sus propios tipos (`types/katex.d.ts`); typecheck ✅ | `package.json` | ✅ |
+| Conservados por diseño | `png2icons` (workflow documentado de regeneración de iconos; `png-to-ico` **sí se eliminó** — la propia doc decía "no usar"), canal IPC `file:write` (superficie documentada), CSS `markdown-hint-btn` (duda → se conserva, §9) | — | ⚪ |
+
+### Fase 4 — DRY y modularización (verificación)
+
+| Ítem | Cambio aplicado | Archivos | Estado |
+|---|---|---|---|
+| Regex de YouTube unificado | El regex de YouTube estaba duplicado en `VideoBlock.tsx` (constante local) y `SlashCommand.tsx` (inline). Nuevo `utils/video.ts` con `parseVideoUrl()` — ambos lo importan; el comando Video del slash ahora devuelve exactamente los mismos `attrs` (`{ type, src }`) que antes (evidencia 🟢: búsqueda posterior → el regex solo vive en `utils/video.ts`) | `utils/video.ts` (nuevo), `VideoBlock.tsx`, `SlashCommand.tsx` | ✅ |
+| FileReader compartido | El patrón `<input type=file>` + `FileReader` (imagen a data URL, CSV/TSV a texto) estaba duplicado en 3 sitios. Nuevo `utils/fileUtils.ts` con `readFileAsDataURL`/`readFileAsText`/`pickImageAsDataURL`; lo usan SlashCommand (imagen), CommandPalette (imagen) y `App.tsx` (drag & drop). Hallazgo del revisor corregido: los `.then()` de `handleDrop` incluyen handler de rechazo (fallo silencioso igual que el original, sin unhandled rejection) | `utils/fileUtils.ts` (nuevo), `SlashCommand.tsx`, `CommandPalette.tsx`, `App.tsx` | ✅ |
+| Factoría `withCellAlign()` | Los bloques `addAttributes` (atributo `align`) de `TableCell.extend` y `TableHeader.extend` eran idénticos (~20 líneas c/u). Extraídos a la factoría local `withCellAlign()` en `extensions/index.ts` — patrón estándar TipTap (`this.parent?.()` funciona porque `extend()` invoca `addAttributes` con la extensión como `this`) | `extensions/index.ts` | ✅ |
+| Módulo `src/main/paths.ts` | La validación de rutas (~90 líneas: `authorizedPaths`, `workspaceFolder`, checks de defensa en profundidad) se extrajo de `src/main/index.ts` a su propio módulo; `index.ts` importa solo lo que usa. Los imports removidos de electron/path (`shell`, `dirname`, `isAbsolute`, `relative`, `normalize`) solo se usaban en el código movido (evidencia 🟢: typecheck + build) | `src/main/paths.ts` (nuevo), `src/main/index.ts` | ✅ |
 
 ---
 
@@ -508,6 +586,11 @@ Solo si ambos pasan sin errores se considera terminado.
 - Los temas se manejan con variables CSS personalizadas (`--bg`, `--text`, `--accent`, etc.) y atributo `data-theme` en `<html>`
 - El tema personalizado se guarda en `localStorage` como JSON con 6 valores de color
 - La comunicación main ↔ renderer usa `contextBridge` + `ipcRenderer.invoke`
+- `DOMPurify` sanea el HTML generado por `markdown-it` antes de insertarlo al editor (2026-08-12)
+- CSP estricta solo en producción vía `onHeadersReceived` (en dev Vite requiere scripts inline/HMR)
+- `utils/video.ts` centraliza el regex de YouTube (antes duplicado en VideoBlock y SlashCommand); `utils/fileUtils.ts` centraliza la lectura FileReader de imágenes/CSV (SlashCommand, paleta y drag & drop) (2026-08-12)
+- `extensions/index.ts` usa la factoría `withCellAlign()` para el atributo `align` de celdas y encabezados de tabla (2026-08-12)
+- `src/main/paths.ts` concentra la validación de rutas autorizadas y del workspace (defensa en profundidad, 2026-08-12)
 - Las extensiones personalizadas (CodeBlock, ResizableImage, MathInline, MathBlock, MermaidBlock) usan `ReactNodeViewRenderer` para renderizado React
 - El arrastre de pestañas usa HTML5 Drag & Drop API con indicadores `::before`/`::after` vía CSS
 - El menú contextual de tablas detecta clics en nodos `table` mediante `view.posAtCoords` + `doc.nodesBetween`
@@ -519,15 +602,15 @@ Solo si ambos pasan sin errores se considera terminado.
 
 | Extensión | Propósito |
 |---|---|
-| StarterKit | Base del editor (párrafos, encabezados, listas, history, etc.) |
-| Placeholder | Texto placeholder "Start writing..." |
+| StarterKit | Base del editor (párrafos, encabezados 1-6, listas, history depth 100, codeBlock deshabilitado) |
+| Placeholder | Texto placeholder "Empieza a escribir..." |
 | Underline | Formato subrayado |
-| Link | Enlaces clicables |
+| Link | Enlaces clicables (`openOnClick: false`) |
 | Typography | Reemplazos tipográficos (comillas, guiones, etc.) |
-| TaskList + TaskItem | Listas de tareas con checkbox |
-| Table + TableRow + TableCell + TableHeader | Tablas (resize desactivado, sort por click removido) |
+| TaskList + TaskItem | Listas de tareas con checkbox (TaskItem extendido: input rule `- [ ]`) |
+| Table + TableRow + TableCell + TableHeader | Tablas (resize desactivado, sort por click removido, atajos Tab/Shift+Tab) |
 | Highlight | Resaltado de texto |
-| TextAlign | Alineación de párrafos |
+| TextAlign | Alineación de párrafos y encabezados |
 | CodeBlock (custom) | Bloques de código con lowlight, copiar y colapsar |
 | ResizableImage (custom) | Imágenes con redimensionar, alinear y alt text |
 | MathInline + MathBlock (custom) | Fórmulas KaTeX inline y en bloque |
@@ -564,12 +647,14 @@ Solo si ambos pasan sin errores se considera terminado.
 - Soporte para la sintaxis Markdown `***text***` que produce texto negrita + cursiva
 - Implementado como inputRule + pasteRule personalizados
 
-### Markdown-it Extended
-- Plugins adicionales en `markdown.ts`: `markdown-it-sub` (subíndice), `markdown-it-sup` (superíndice), `markdown-it-footnote` (notas al pie), `markdown-it-mark` (resaltado), `markdown-it-ins` (insertado), `markdown-it-kbd` (teclado)
-- Turndown con reglas personalizadas para: bloques de código, task items, tachado, subíndice, superíndice, imágenes con alt+width+height+align
+### Markdown-it (Configuración Real)
+- `markdown.ts` usa `new MarkdownIt({ html: true, linkify: true, typographer: true })` — **sin plugins adicionales**
+- Los plugins `markdown-it-sub`, `markdown-it-sup`, `markdown-it-footnote`, `markdown-it-mark`, `markdown-it-ins`, `markdown-it-kbd` **no existen** en `package.json` ni se importan en `markdown.ts` (documentación anterior incorrecta)
+- Turndown con reglas personalizadas para: strikethrough (`~~`), highlight (`==`), task lists (`- [ ]`), bloques matemáticos (`$$...$$`), fórmulas inline (`$...$`) y tablas con alineación
 
-### Default Content (DEFAULT_MD)
-- Nuevos documentos se crean con un contenido inicial template que incluye ejemplos de: encabezados, formato, listas, bloque de código, tabla, matemáticas, diagrama Mermaid
+### Default Content
+- Los nuevos documentos se crean **en blanco** (`createTab()` con contenido vacío)
+- La constante `DEFAULT_MD` (template con ejemplos de encabezados, formato, listas, tablas, matemáticas, Mermaid) **fue eliminada en 2026-08-12** — no se usaba en ningún punto (evidencia 🟢: knip + búsqueda de importadores)
 
 ### File Association / Single Instance
 - `app.requestSingleInstanceLock()` para evitar múltiples instancias
@@ -611,13 +696,13 @@ Solo si ambos pasan sin errores se considera terminado.
 
 ### Markdown Source Editor
 - Vista fuente implementada con `<textarea>` sincronizado al estado del tab
-- Al cambiar a vista fuente: `editor.setEditable(false)`, se muestra textarea con contenido raw
-- Al cambiar a WYSIWYG: se parsea el texto del textarea y se vuelca al editor con `editor.commands.setContent()`
+- Al cambiar a vista fuente: se renderiza el `<textarea>` en lugar del editor WYSIWYG (toggle condicional `ui.showSource`); al volver a WYSIWYG el contenido se parsea y se vuelca con `editor.commands.setContent()`
 - Atajo Escape vuelve a WYSIWYG
 - La vista fuente hereda estilos del editor (padding, font-size, max-width, caret-color)
 
-### lucide-react Icons
-- La Toolbar usa `lucide-react` para iconografía (FileText, Bold, Italic, etc.)
+### Iconografía de la Toolbar
+- La Toolbar **ya no usa `lucide-react`**: desde la simplificación de UI (v0.1.2) usa etiquetas de texto y emojis (📄 📂 📁 💾 ↶ ↷ H1 H2 H3 B I • ☑ ❝ {} ⊞ 🗂 <> 🎯 🌙 🤖)
+- `lucide-react` fue **eliminada de `package.json`** en 2026-08-12 (evidencia 🟢: no se importaba en ningún archivo de `src/`; `npm uninstall` + typecheck + build OK)
 
 ### Diccionario Personalizado de Corrección Ortográfica
 - Permite al usuario agregar palabras personalizadas que no se marcan como error ortográfico
@@ -646,7 +731,9 @@ Solo si ambos pasan sin errores se considera terminado.
 - Sistema de plugins (extensiones cargables dinámicamente)
 - Temas comunitarios (importar/exportar temas)
 - Buscador de archivos en el explorador
-- Atajo Ctrl+Tab para navegación entre pestañas
+- Persistir workspace folder entre sesiones
+
+> **Nota**: Ctrl+Tab para navegación entre pestañas **ya está implementado** (navegación circular en `useKeyboardShortcuts.ts`); pendiente solo el orden MRU.
 
 ---
 
@@ -887,8 +974,10 @@ Usuario → clic derecho en palabra mal escrita
 - **TabContextMenu detecta solo tablas del editor activo**: El menú contextual usa `view.posAtCoords` y funciona correctamente, pero no hay atajo de teclado para tablas.
 - **Source view ↔ WYSIWYG pierde sintaxis no compatible**: Elementos que Turndown no puede convertir (como atributos HTML avanzados en Markdown) pueden perderse al alternar entre vistas.
 - **El modo foco atenúa Stats**: Por diseño, pero Stats no reaparece al hover a diferencia de sidebars (mejora menor pendiente).
-- **Decoraciones de búsqueda (SearchReplace) no se limpian al cerrar**: Quedan decoraciones en el editor hasta que se abre una nueva búsqueda (no visible para el usuario pero sí en el estado interno de ProseMirror).
 - **TabView (vista fuente) en pestaña nueva**: Al abrir vista fuente y luego cambiar de pestaña, el textarea no se sincroniza correctamente si hubo cambios sin guardar.
+- ~~**Settings.tsx mostraba "F11 Pantalla completa"**~~: ✅ Corregido (2026-08-12) — ahora muestra "F11 Modo Enfoque"; lo mismo en `MenuBar`, `WelcomeScreen` y `OnboardingModal`. Se añadieron los atajos faltantes (Ctrl+Shift+Tab, Tab/Shift+Tab en tablas).
+
+> **Resuelto**: Las decoraciones de búsqueda (SearchReplace) **sí se limpian** al cerrar — el plugin se registra/desregistra con `useEffect` en `SearchReplace.tsx` (ver tabla de Diferencias, #8).
 
 ---
 
@@ -935,26 +1024,29 @@ Electron Main Process (src/main/index.ts)
     │
     └── Renderer (src/renderer/)
             │
-            ├── App.tsx (estado global, editor, layout)
-            │   ├── tabs: TabDoc[] (array de pestañas)
-            │   ├── activeTabId: string
-            │   ├── showWelcome: boolean
-            │   ├── showSource: boolean (vista fuente)
-            │   ├── showSearch: boolean, showCommandPalette, showSettings
-            │   ├── focusMode: boolean
-            │   ├── theme: string, customTheme
+            ├── App.tsx (editor + layout; estado delegado a hooks)
+            │   ├── useEditorState.ts: theme, fontSize, paneles (search, palette,
+            │   │   outline, stats, explorer), focusMode, workspaceFolder, onboarding,
+            │   │   confirmaciones, source view
+            │   ├── useTabs.ts: TabDoc[] (id, filePath, content, modified), apertura,
+            │   │   guardado, cierre (tab/others/all/right/saved), reordenar
+            │   └── useKeyboardShortcuts.ts: atajos globales + guardado al salir
             │
             ├── components/ (UI)
             ├── extensions/ (TipTap personalizadas)
-            └── utils/ (markdown, export, themes, stats, prompt)
+            ├── hooks/ (estado refactorizado en v0.1.5)
+            ├── knowledge/ (temas del Mentor Markdown)
+            └── utils/ (markdown, export, themes, stats, prompt, customDictionary,
+                        markdownHints, tableParser, tablePicker)
 ```
 
 ### Manejo de Estado del Editor
 
-1. Cada pestaña tiene: `{ id, filePath?, content, modified, savedContent }`
-2. Al cambiar de pestaña: se guarda el contenido actual en `tabs[].content`, se carga el nuevo tab con `loadTabIntoEditor`
-3. `onUpdate` del editor escribe en `tabs[].content` pero un flag `switchingTab` evita sobrescribir durante cambios de pestaña
-4. `onSelectionUpdate` actualiza línea/columna/palabras en la barra de estado
+1. Cada pestaña tiene: `{ id, filePath, content, modified }` (TabDoc en `useTabs.ts`)
+2. Al cambiar de pestaña: `syncEditorToTab()` guarda el contenido actual, se carga el nuevo tab con `loadTabIntoEditor`
+3. `onUpdate` del editor escribe en `tabs[].content` pero el flag `switchingTab` (ref) evita sobrescribir durante cambios de pestaña
+4. `onSelectionUpdate` actualiza línea/columna/palabras en la barra de estado (App.tsx)
+5. `onUpdate` usa `activeTabIdRef` para no capturar IDs obsoletos (stale closures)
 
 ### Ciclo de Vida del Editor
 
@@ -995,12 +1087,12 @@ El flujo completo para el pegado desde Excel/Sheets:
 
 ```
 1. Clipboard paste event
-   → parseFromClipboard(view, text, html, plainText, $context) [clipboard.ts:43]
-   
-2. transformPastedHTML (App.tsx:152-166)
-   → Busca <pre> en el HTML
-   → Excel/Sheets no tienen <pre>
-   → Retorna html sin cambios
+   → `handlePaste` en `editorProps` (App.tsx) intercepta primero
+   → Lee `text/plain`; si NO es código, pasa el HTML tal cual a ProseMirror
+   → Si el texto parece Markdown, lo convierte con `mdToHtml` e inserta
+
+2. parseFromClipboard(view, text, html, plainText, $context) [clipboard.ts:43]
+   → Para Excel/Sheets: HTML sin `<pre>` → se pega sin transformación
 
 3. readHTML(html) [clipboard.ts:224-234]
    → Detecta primer tag: <html> (no está en wrapMap)
@@ -1047,16 +1139,16 @@ Se creó `test_paste.cjs` que simula el pipeline completo con domino + prosemirr
 | **Plain table** (solo `<table>` sin wrapper) | ✅ Paso | 2 | 4 | `tableHeader(Nombre), tableHeader(Edad)` |
 | **Table con thead/tbody** | ✅ Paso | 2 | 4 | `tableHeader(Nombre), tableHeader(Edad)` |
 
-#### 4. `transformPastedHTML` en App.tsx no interfiere
+#### 4. `handlePaste` en App.tsx no interfiere
 
-El `transformPastedHTML` actual (líneas 152-166) solo modifica HTML que contiene `<pre>` (para pegado de ChatGPT/fenced code). Para Excel/Sheets, no hay `<pre>`, por lo que el HTML se retorna sin cambios. **No requiere modificación.**
+El `handlePaste` actual (en `editorProps`) solo interviene cuando el texto plano parece Markdown (`looksLikeMarkdown()`). Para Excel/Sheets, el contenido no parece Markdown, por lo que se retorna `false` y ProseMirror procesa el HTML nativamente. **No requiere modificación.**
 
 ### Decisión
 
 **No implementar nada.** P7 está resuelto por la infraestructura existente:
 
 1. Excel/Google Sheets/LibreOffice ponen `text/html` con `<table>` en el portapapeles
-2. `transformPastedHTML` pasa el HTML sin cambios (no hay `<pre>`)
+2. `handlePaste` retorna `false` (no es Markdown), el HTML pasa sin cambios
 3. `readHTML()` crea un div con el HTML completo como innerHTML
 4. `<head>`, `<style>`, `<meta>` se ignoran automáticamente
 5. El DOMParser de ProseMirror encuentra `<table>` → `parseHTML: [{ tag: 'table' }]` → crea el nodo table
@@ -1086,15 +1178,16 @@ El `transformPastedHTML` actual (líneas 152-166) solo modifica HTML que contien
 
 | # | Documentación dice | Realidad | Estado |
 |---|---|---|---|
-| 1 | `markdown.ts` usa plugins `markdown-it-sub`, `markdown-it-sup`, `markdown-it-footnote`, `markdown-it-mark`, `markdown-it-ins`, `markdown-it-kbd` | `markdown.ts:4` — solo `new MarkdownIt({...})` sin plugins adicionales. Esas 6 dependencias **no existen** en `package.json`. | ❌ Doc incorrecta |
-| 2 | `package.json` version = v0.3.1 | `"version": "0.1.2"` — desactualizada respecto al historial documentado | ⚠️ Desincronizado |
-| 3 | "Toggle Auto-save" en Settings controla el intervalo de 30s | No existe en App.tsx ni Settings.tsx — funcionalidad documentada pero nunca implementada | ❌ No implementado |
-| 4 | Workspace folder se persiste entre sesiones | No hay persistencia (`localStorage` ni archivo de config), se pierde al reiniciar | ⚠️ No implementado |
-| 5 | `lang="en"` en HTML (doc implícito) | `index.html:3`: `lang="en"` pero toda la UI está en español | ⚠️ Inconsistencia |
-| 6 | Ctrl+Tab listado como [ ] en Roadmap (README) | `App.tsx:480-489` — Ctrl+Tab **ya está implementado** (navegación circular) | ⚠️ Roadmap desactualizado |
-| 7 | Menú contextual tablas como [ ] en Roadmap (README) | Implementado desde v0.2.0 | ⚠️ Roadmap desactualizado |
+| 1 | `markdown.ts` usa plugins `markdown-it-sub`, `markdown-it-sup`, `markdown-it-footnote`, `markdown-it-mark`, `markdown-it-ins`, `markdown-it-kbd` | `markdown.ts` — solo `new MarkdownIt({ html, linkify, typographer })` sin plugins adicionales. Esas 6 dependencias **no existen** en `package.json`. Sección "Markdown-it Extended" corregida. | ❌ Doc incorrecta (sección corregida) |
+| 2 | `package.json` version desactualizada | `"version": "0.1.6"` — actual. Las versiones v0.2/v0.3.x documentadas nunca existieron en package.json (renumeradas a v0.1.x). Historial corregido. | ✅ Sincronizado |
+| 3 | "Toggle Auto-save" en Settings controla el intervalo de 30s | No existe en el código — funcionalidad documentada pero nunca implementada | ❌ No implementado |
+| 4 | Workspace folder se persiste entre sesiones | `workspaceFolder` existe en `useEditorState.ts` pero **no tiene persistencia** (ni localStorage ni config), se pierde al reiniciar | ⚠️ No implementado |
+| 5 | `lang="en"` en HTML | `index.html:3`: `lang="en"` pero toda la UI está en español | ⚠️ Inconsistencia |
+| 6 | Ctrl+Tab listado como [ ] en Roadmap (README) | Ctrl+Tab **ya está implementado** (navegación circular) en `useKeyboardShortcuts.ts` | ✅ Implementado |
+| 7 | Menú contextual tablas como [ ] en Roadmap (README) | Implementado (`handleDOMEvents.contextMenu` en App.tsx + TableContextMenu) | ✅ Implementado |
 | 8 | SearchReplace decoraciones "no se limpian al cerrar" (problema conocido) | El plugin se registra/desregistra con `useEffect` en `SearchReplace.tsx`; las decoraciones se limpian al desmontar | ✅ Resuelto |
-| 9 | `@tiptap/extension-image` como dependencia | No se usa en ningún import; `ResizableImage.tsx` extiende el nodo `image` con nombre propio | ♻️ Innecesaria |
+| 9 | `@tiptap/extension-image` como dependencia | **Removida de `package.json`** — ya no aparece entre las dependencias | ✅ Resuelto |
+| 10 | Toolbar usa `lucide-react` para iconografía | La Toolbar usa texto/emojis desde v0.1.2. `lucide-react` **removida de package.json** (2026-08-12) | ✅ Resuelto |
 
 ---
 
@@ -1108,12 +1201,13 @@ El `transformPastedHTML` actual (líneas 152-166) solo modifica HTML que contien
 - **FileExplorer con 4 secciones** y operaciones CRUD completas vía IPC
 
 ### Deuda Técnica
-- **App.tsx monolítico** (677 líneas): mezcla estado global, lógica de editor, handlers de teclado, y layout JSX. Dificulta testing y mantenimiento.
+- ~~**App.tsx monolítico**~~: ✅ **Resuelto en v0.1.5** — estado extraído a `useTabs.ts`, `useEditorState.ts` y `useKeyboardShortcuts.ts`. App.tsx ahora solo orquesta hooks + layout.
 - **CSS global** (~1400 líneas sin revisar): estilos planos sin modules, 6 temas inline. Riesgo de colisiones y dificultad para escalar.
-- **Flujo de pestañas frágil**: el flag `switchingTab` con `setTimeout(50ms)` es un hack temporal. Podría fallar en condiciones de latencia alta.
+- **Flujo de pestañas frágil**: el flag `switchingTab` con `setTimeout(50ms)` sigue siendo un hack temporal. Podría fallar en condiciones de latencia alta.
 - **SlashCommand usa `createRoot()` directo** en vez de integración React estándar, potencial conflicto con StrictMode.
-- **Auto-save documentado pero no implementado**: La documentación menciona un toggle de autoguardado que nunca fue implementado en el código. Verificado en 2026-07-02.
+- **Auto-save documentado pero no implementado**: La documentación mencionaba un toggle de autoguardado que nunca fue implementado en el código. Verificado en 2026-07-02. README.md ya corregido (2026-08-12): se documenta guardado manual + confirmación al salir.
 - **Tema personalizado duplica lógica** entre `themes.ts:saveTheme()` y `Settings.tsx:applyCustomTheme()` con el mismo conjunto de propiedades CSS.
+- ~~**`lucide-react` sin uso**~~: ✅ Eliminada de package.json (2026-08-12).
 
 ### Riesgos de Modificación
 1. **App.tsx**: Cualquier cambio en el sistema de pestañas requiere probar todas las funciones de cierre (closeTab, closeOthers, closeRight, closeAll, closeSaved) por el historial de bugs `flushSync`.
@@ -1126,16 +1220,16 @@ El `transformPastedHTML` actual (líneas 152-166) solo modifica HTML que contien
 ## Tareas Pendientes (Actualizado 2026-06-22)
 
 ### Bugs Confirmados
-- [ ] **markdown-it plugins documentados pero ausentes**: `markdown-it-sub`, `markdown-it-sup`, `markdown-it-footnote`, `markdown-it-mark`, `markdown-it-ins`, `markdown-it-kbd` no están en `package.json` ni se importan en `markdown.ts`
-- [ ] **package.json version desactualizada**: `"0.1.2"` contra v0.3.1 documentado
+- [ ] **markdown-it plugins documentados pero ausentes**: `markdown-it-sub`, `markdown-it-sup`, `markdown-it-footnote`, `markdown-it-mark`, `markdown-it-ins`, `markdown-it-kbd` no están en `package.json` ni se importan en `markdown.ts` (documentación ya corregida; falta decidir si implementarlos o dejar la sección como está)
 
 ### Deuda Técnica
-- [ ] **App.tsx monolítico**: Refactorizar en hooks separados (useTabs, useEditorState, useKeyboardShortcuts)
+- [x] ~~**App.tsx monolítico**~~: ✅ Refactorizado en v0.1.5 (useTabs, useEditorState, useKeyboardShortcuts)
 - [ ] **CSS modularizar**: Migrar a CSS modules o styled-components para evitar colisiones
-- [ ] **`@tiptap/extension-image`**: Dependencia no utilizada, remover
+- [x] ~~**`@tiptap/extension-image`**~~: ✅ Removida de package.json
 - [ ] **`switchingTab setTimeout(50ms)`**: Reemplazar por mecanismo más robusto basado en transacciones PM
 - [ ] **SlashCommand `createRoot()` directo**: Migrar a renderizado React controlado
 - [ ] **Persistir workspace folder** en localStorage
+- [x] ~~**`lucide-react` sin uso**~~: ✅ Eliminada de package.json (2026-08-12)
 
 ### Features Pendientes
 - [ ] Sistema de plugins (extensiones cargables dinámicamente)
@@ -2765,7 +2859,7 @@ Soportar pegado directo de tablas desde Excel, Google Sheets u otras hojas de c�
 |---|---|---|
 | **Ctrl+V (HTML)** | Excel/Sheets copian `<table>` al portapapeles HTML. prosemirror `parseHTML` lo convierte automáticamente a nodos `table`/`tr`/`td`/`th`. | ✅ Existente |
 | **Ctrl+Shift+V (texto plano)** | El contenido llega como TSV (tabs + newlines). El usuario ejecuta CommandPalette → "Convertir datos a tabla" → `tableParser.ts` lo parsea sin cambios. | ✅ Existente (P6) |
-| **Drag & drop** | Electron/file drop provee texto plano. Mismo flujo que Ctrl+Shift+V. | ✅ Existente |
+| **Drag & drop** | Arrastrar un archivo CSV/TSV/TXT al editor lo importa automáticamente como tabla (`handleDrop` + `tableParser`). Arrastrar texto plano sigue el flujo de Ctrl+Shift+V. | ✅ Implementado (v0.1.5) |
 
 ### Validaciones realizadas
 
@@ -3221,6 +3315,8 @@ Dos capas independientes manejaban el teclado simultáneamente: Tiptap (editor) 
 | Ctrl+F | Buscar | Buscar (foco en buscar) | Separación de Ctrl+F y Ctrl+H |
 | Ctrl+H | Buscar (mismo comportamiento que Ctrl+F) | Buscar y reemplazar (foco en reemplazar) | Comportamiento diferenciado |
 | Ctrl+1/2/3 | (mostrado como shortcut de encabezados) | Ctrl+Alt+1/2/3 (corregido) | El shortcut real de Tiptap para encabezados es Mod+Alt+N |
+
+> **Nota (2026-08-12)**: Verificado en el código actual — **no existe ningún atajo de teclado para encabezados** (ni Ctrl+1/2/3, ni Ctrl+Alt+1/2/3, ni Mod+Alt+N) en `useKeyboardShortcuts.ts` ni en Tiptap. Los encabezados H1-H3 se aplican desde la barra de herramientas, la paleta de comandos o el menú slash. La corrección documentada en esta bitácora no llegó a implementarse.
 | Escape | Cerrar diálogos | Cerrar diálogos | Sin cambios, documentado explícitamente |
 
 ### Filosofía para futuros desarrollos
@@ -3230,6 +3326,33 @@ Dos capas independientes manejaban el teclado simultáneamente: Tiptap (editor) 
 Esto garantiza que la experiencia de escritura Markdown sea predecible y estándar. Los atajos de la aplicación se asignan a teclas libres de conflictos con el editor. Cualquier nuevo shortcut debe ser verificado contra la tabla completa de atajos de Tiptap antes de ser asignado.
 
 ---
+
+### 2026-08-12 — Eliminación de logs de depuración en producción (auditoría code-auditor #1)
+
+**Objetivo**: Eliminar los logs de depuración que exponían el contenido completo de los documentos en consola (hallazgo crítico de la auditoría code-auditor).
+
+**Cambios realizados** (nivel ESTÁNDAR):
+- `markdown.ts`: eliminados 4 logs `[P12:MD/HM] INPUT/OUTPUT` que volcaban `JSON.stringify` del documento completo en cada conversión MD↔HTML
+- `useTabs.ts`: eliminados 11 logs `[P12:SE/LT/GM/CS]`
+- `App.tsx`: eliminados 6 logs `[P12:OU/TS/LE]`
+- `Toolbar.tsx`: eliminados 13 logs `[DEBUG]` de hints (incluido render del hintState)
+
+**Conservados intencionalmente**: `console.error` en catch (FileExplorer.tsx), forwarding `[renderer:tag]` en main (diagnóstico), y `console.log` que son contenido educativo dentro de strings (knowledge/index.ts, markdownHints.ts, DEFAULT_MD).
+
+**Validación**: `npm run typecheck` ✅ · `npm run build` ✅
+
+### 2026-08-12 — Corrección de atajos en Settings + eliminación de lucide-react
+
+**Objetivo**: Alinear la UI de Configuración con los atajos reales y eliminar una dependencia sin uso.
+
+**Cambios realizados**:
+1. **Settings.tsx — sección Atajos**: `F11 Pantalla completa` → `F11 Modo Enfoque`; añadidos `Ctrl+Shift+Tab` (anterior pestaña) y `Tab`/`Shift+Tab` (navegación en tablas). Verificado contra `useKeyboardShortcuts.ts` y `extensions/index.ts`.
+2. **lucide-react eliminada de package.json**: evidencia 🟢 de cero imports en `src/`; `npm uninstall lucide-react` (2 paquetes removidos) + `npm run typecheck` + `npm run build` sin errores.
+
+**Archivos modificados**:
+- `src/renderer/src/components/Settings.tsx`
+- `package.json`, `package-lock.json`
+- `documents/DOCUMENTACION.md`
 
 ### 2026-07-02 — Verificación de documentación y estado del proyecto
 

@@ -251,14 +251,17 @@ export function Settings({ theme, fontSize, onThemeChange, onFontSizeChange, onC
               <div><kbd>Ctrl+Shift+O</kbd> Abrir carpeta</div>
               <div><kbd>Ctrl+W</kbd> Cerrar pestaña</div>
               <div><kbd>Ctrl+Tab</kbd> Siguiente pestaña</div>
+              <div><kbd>Ctrl+Shift+Tab</kbd> Anterior pestaña</div>
               <div><kbd>Ctrl+Z</kbd> Deshacer</div>
               <div><kbd>Ctrl+Y</kbd> Rehacer</div>
               <div><kbd>Ctrl+F</kbd> Buscar</div>
               <div><kbd>Ctrl+H</kbd> Buscar y reemplazar</div>
               <div><kbd>Ctrl+Shift+M</kbd> Vista fuente</div>
               <div><kbd>F9</kbd> Explorador de archivos</div>
-              <div><kbd>F11</kbd> Pantalla completa</div>
+              <div><kbd>F11</kbd> Modo Enfoque</div>
               <div><kbd>Ctrl+Shift+P</kbd> Paleta de comandos</div>
+              <div><kbd>Tab</kbd> (en tabla) Siguiente celda / nueva fila</div>
+              <div><kbd>Shift+Tab</kbd> (en tabla) Salir de la tabla</div>
               <div><kbd>Escape</kbd> Cerrar diálogos</div>
             </div>
           </section>

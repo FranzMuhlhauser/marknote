@@ -1,7 +1,9 @@
-import { app, BrowserWindow, ipcMain, dialog, shell, Menu, session } from 'electron'
-import { join, dirname, basename, extname } from 'path'
+import { app, BrowserWindow, ipcMain, dialog, Menu, session } from 'electron'
+import { join, basename, extname } from 'path'
 import { readFile, writeFile, readdir, mkdir, rename, copyFile, unlink } from 'fs/promises'
+import { constants as fsConstants } from 'fs'
 import { autoUpdater } from 'electron-updater'
+import { authorizePath, assertFileAllowed, isMarkdownPath, isMoveAllowed, isSafeName, isValidPathInput, setWorkspaceFolder } from './paths'
 
 let mainWindow: BrowserWindow | null = null
 let startupFilePath: string | null = null
@@ -12,6 +14,7 @@ function send(channel: string, ...args: any[]) {
 
 function dispatchOpenFile(filePath: string) {
   startupFilePath = filePath
+  authorizePath(filePath)
   if (!mainWindow) return
 
   const sendFile = () => send('file:open', filePath)
@@ -43,6 +46,21 @@ function createWindow(): void {
   })
 
   session.defaultSession.setSpellCheckerLanguages(['es'])
+
+  // CSP estricta solo en producción: el dev server de Vite requiere scripts
+  // inline (react-refresh) y websockets de HMR que esta política bloquearía.
+  if (!process.env.ELECTRON_RENDERER_URL) {
+    session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
+      callback({
+        responseHeaders: {
+          ...details.responseHeaders,
+          'Content-Security-Policy': [
+            "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' file: data: blob: https:; font-src 'self' data:; connect-src 'self'; media-src 'self' file: data: blob: https:; frame-src 'self' https:"
+          ]
+        }
+      })
+    })
+  }
 
   mainWindow.webContents.on('context-menu', (event, params) => {
     event.preventDefault()
@@ -131,6 +149,7 @@ ipcMain.handle('dialog:open', async () => {
   })
   if (result.canceled || result.filePaths.length === 0) return null
   const content = await readFile(result.filePaths[0], 'utf-8')
+  authorizePath(result.filePaths[0])
   return { filePath: result.filePaths[0], content }
 })
 
@@ -141,17 +160,30 @@ ipcMain.handle('dialog:openCsv', async () => {
   })
   if (result.canceled || result.filePaths.length === 0) return null
   const content = await readFile(result.filePaths[0], 'utf-8')
+  authorizePath(result.filePaths[0])
   return { filePath: result.filePaths[0], content }
 })
 
 ipcMain.handle('dialog:save', async (_event, { filePath, content }: { filePath?: string; content: string }) => {
-  const path = filePath ?? (await dialog.showSaveDialog(mainWindow!, {
-    filters: [{ name: 'Markdown', extensions: ['md'] }],
-    defaultPath: 'untitled.md'
-  })).filePath
-  if (!path) return null
-  await writeFile(path, content, 'utf-8')
-  return path
+  let path = filePath
+  if (!path) {
+    const result = await dialog.showSaveDialog(mainWindow!, {
+      filters: [{ name: 'Markdown', extensions: ['md'] }],
+      defaultPath: 'untitled.md'
+    })
+    if (result.canceled || !result.filePath) return null
+    path = result.filePath
+  }
+  // Un fallo de escritura se devuelve como resultado (no se lanza) para que
+  // el renderer pueda informarlo y no marcar el documento como guardado.
+  try {
+    assertFileAllowed(path)
+    await writeFile(path, content, 'utf-8')
+    authorizePath(path)
+    return { ok: true, path }
+  } catch (err: any) {
+    return { ok: false, error: err?.message ?? 'Error al guardar el archivo' }
+  }
 })
 
 ipcMain.handle('dialog:openFolder', async () => {
@@ -159,6 +191,8 @@ ipcMain.handle('dialog:openFolder', async () => {
     properties: ['openDirectory']
   })
   if (result.canceled || result.filePaths.length === 0) return null
+  setWorkspaceFolder(result.filePaths[0])
+  authorizePath(result.filePaths[0])
   return result.filePaths[0]
 })
 
@@ -177,15 +211,30 @@ async function listMdFiles(dir: string, baseDir: string): Promise<{ name: string
 }
 
 ipcMain.handle('folder:listFiles', async (_event, folderPath: string) => {
-  return await listMdFiles(folderPath, folderPath)
+  if (!isValidPathInput(folderPath)) return []
+  const files = await listMdFiles(folderPath, folderPath)
+  for (const f of files) authorizePath(f.path)
+  return files
 })
 
 ipcMain.handle('file:read', async (_event, filePath: string) => {
-  return await readFile(filePath, 'utf-8')
+  if (!isValidPathInput(filePath)) throw new Error('Ruta de archivo no válida')
+  const content = await readFile(filePath, 'utf-8')
+  // Solo los .md se autorizan para operaciones destructivas posteriores;
+  // acota la superficie de escalada lectura → borrado a archivos del dominio.
+  if (isMarkdownPath(filePath)) authorizePath(filePath)
+  return content
 })
 
 ipcMain.handle('file:write', async (_event, filePath: string, content: string) => {
-  await writeFile(filePath, content, 'utf-8')
+  try {
+    assertFileAllowed(filePath)
+    await writeFile(filePath, content, 'utf-8')
+    authorizePath(filePath)
+    return { ok: true }
+  } catch (err: any) {
+    return { ok: false, error: err?.message ?? 'Error al guardar el archivo' }
+  }
 })
 
 ipcMain.handle('update:startDownload', () => { autoUpdater.downloadUpdate() })
@@ -197,35 +246,53 @@ ipcMain.handle('window:toggleFullscreen', () => {
 })
 
 ipcMain.handle('file:createFolder', async (_event, parentPath: string, name: string) => {
+  assertFileAllowed(parentPath)
+  if (!isSafeName(name)) throw new Error('Nombre de carpeta no válido')
   await mkdir(join(parentPath, name), { recursive: true })
+  authorizePath(join(parentPath, name))
 })
 
 ipcMain.handle('file:rename', async (_event, oldPath: string, newPath: string) => {
+  if (!isMoveAllowed(oldPath, newPath)) throw new Error('Acceso denegado')
+  if (!isSafeName(basename(newPath))) throw new Error('Nombre de archivo no válido')
   await rename(oldPath, newPath)
+  authorizePath(newPath)
 })
 
 ipcMain.handle('file:duplicate', async (_event, filePath: string) => {
+  assertFileAllowed(filePath)
   const ext = extname(filePath)
   const base = filePath.slice(0, -ext.length)
   let newPath = `${base} (copia)${ext}`
-  let counter = 1
-  while (true) {
+  for (let counter = 1; counter <= 100; counter++) {
     try {
-      await copyFile(filePath, newPath)
+      // COPYFILE_EXCL: falla con EEXIST si el destino ya existe (no sobrescribe).
+      await copyFile(filePath, newPath, fsConstants.COPYFILE_EXCL)
+      authorizePath(newPath)
       return newPath
-    } catch {
-      counter++
-      newPath = `${base} (copia ${counter})${ext}`
+    } catch (err: any) {
+      // Solo "ya existe" es esperado: se prueba el siguiente nombre.
+      // Cualquier otro error (ENOENT, EACCES, EPERM...) se propaga y termina.
+      if (err?.code === 'EEXIST') {
+        newPath = `${base} (copia ${counter + 1})${ext}`
+        continue
+      }
+      throw err
     }
   }
+  throw new Error('No se pudo generar un nombre único para la copia')
 })
 
 ipcMain.handle('file:delete', async (_event, filePath: string) => {
+  assertFileAllowed(filePath)
   await unlink(filePath)
 })
 
 ipcMain.handle('file:move', async (_event, oldPath: string, newPath: string) => {
+  if (!isMoveAllowed(oldPath, newPath)) throw new Error('Acceso denegado')
+  if (!isSafeName(basename(newPath))) throw new Error('Nombre de archivo no válido')
   await rename(oldPath, newPath)
+  authorizePath(newPath)
 })
 
 ipcMain.handle('app:quit', () => {
@@ -249,6 +316,19 @@ ipcMain.handle('spellcheck:removeWord', (_event, word: string) => {
 ipcMain.handle('spellcheck:addWords', (_event, words: string[]) => {
   for (const word of words) {
     session.defaultSession.addWordToSpellCheckerDictionary(word)
+  }
+})
+
+// Autoriza al inicio las rutas .md que el usuario ya conoce (favoritos,
+// recientes, papelera) para no romper eliminar/renombrar sin abrir el archivo.
+// No amplía la superficie de ataque: un renderer comprometido ya puede
+// autorizar cualquier .md existente leyéndolo (file:read autoriza .md).
+ipcMain.handle('paths:seed', (_event, paths: unknown) => {
+  if (!Array.isArray(paths)) return
+  for (const p of paths) {
+    if (typeof p === 'string' && isValidPathInput(p) && isMarkdownPath(p)) {
+      authorizePath(p)
+    }
   }
 })
 

@@ -1,6 +1,7 @@
 import { useState, useCallback, useEffect, useRef } from 'react'
 import { htmlToMd, mdToHtml } from '../utils/markdown'
 import { getTabTitle, type TabInfo } from '../components/TabBar'
+import { showToast } from '../utils/tableParser'
 
 interface TabDoc {
   id: string
@@ -54,7 +55,6 @@ export function useTabs({
     const ed = editorRef.current
     if (!ed || !activeTabId) return
     const md = showSource ? sourceText : htmlToMd(ed.getHTML())
-    console.log('[P12:SE] syncEditorToTab, activeTabId:', activeTabId, 'showSource:', showSource, 'md length:', md.length, 'md preview:', JSON.stringify(md.slice(0, 200)))
     setTabs(prev => prev.map(t =>
       t.id === activeTabId ? { ...t, content: md, modified: t.modified || md !== t.content } : t
     ))
@@ -64,13 +64,8 @@ export function useTabs({
     const ed = editorRef.current
     if (!ed) return
     switchingTab.current = true
-    console.log('[P12:LT] loadTabIntoEditor, tab.id:', tab.id, 'content length:', tab.content.length, 'content preview:', JSON.stringify(tab.content.slice(0, 200)))
     const html = mdToHtml(tab.content)
-    console.log('[P12:LT] about to setContent, html:', JSON.stringify(html))
     ed.commands.setContent(html)
-    console.log('[P12:LT] after setContent, getHTML:', JSON.stringify(ed.getHTML()))
-    console.log('[P12:LT] after setContent, getJSON:', JSON.stringify(ed.getJSON()))
-    console.log('[P12:LT] after setContent, getText:', JSON.stringify(ed.getText()))
     setSourceText(tab.content)
     setShowSource(false)
     setShowWelcome(false)
@@ -94,10 +89,10 @@ export function useTabs({
 
   function confirmCloseMultiple(unsavedTabs: TabDoc[]): Promise<'save' | 'discard' | 'cancel'> {
     return new Promise(resolve => {
-      const docList = unsavedTabs.map(t => `• ${getTabTitle(t.filePath)}`).join('\\n')
+      const docList = unsavedTabs.map(t => `• ${getTabTitle(t.filePath)}`).join('\n')
       setPendingConfirm({
         title: 'Guardar cambios',
-        message: `Los siguientes documentos tienen cambios sin guardar:\\n${docList}`,
+        message: `Los siguientes documentos tienen cambios sin guardar:\n${docList}`,
         buttons: [
           { label: 'Guardar todo', onClick: () => { setPendingConfirm(null); resolve('save') }, className: 'confirm-btn-save' },
           { label: 'No guardar ninguno', onClick: () => { setPendingConfirm(null); resolve('discard') }, className: 'confirm-btn-discard' },
@@ -110,66 +105,57 @@ export function useTabs({
 
   const getMarkdown = useCallback(() => {
     if (showSource) {
-      console.log('[P12:GM] showSource=true, returning sourceText length:', sourceText.length)
       return sourceText
     }
     const ed = editorRef.current
     if (!ed) {
-      console.log('[P12:GM] no editor ref, returning empty')
       return ''
     }
-    const result = htmlToMd(ed.getHTML())
-    console.log('[P12:GM] htmlToMd result length:', result.length, 'result preview:', JSON.stringify(result.slice(0, 200)))
-    return result
+    return htmlToMd(ed.getHTML())
   }, [showSource, sourceText])
+
+  // Guarda un tab y solo lo marca como guardado si la escritura tuvo éxito.
+  // Devuelve false si el usuario cancela el diálogo o si falla la escritura
+  // (el tab permanece modified:true y se informa el error para no perder datos).
+  const performSave = useCallback(async (tab: TabDoc, text: string, isActive: boolean): Promise<boolean> => {
+    try {
+      const result = await window.api.saveFile(tab.filePath ?? undefined, text)
+      if (!result) return false
+      if (!result.ok) {
+        showToast(result.error || 'Error al guardar el archivo')
+        return false
+      }
+      const savedPath = result.path ?? tab.filePath
+      setTabs(prev => prev.map(t =>
+        t.id === tab.id ? { ...t, filePath: savedPath, content: text, modified: false } : t
+      ))
+      if (isActive) setSourceText(text)
+      if (savedPath) addRecent(savedPath)
+      return true
+    } catch {
+      showToast('Error al guardar el archivo')
+      return false
+    }
+  }, [setSourceText])
 
   const saveDoc = useCallback(async () => {
     if (!activeTab) return
     const text = getMarkdown()
-    const path = await window.api.saveFile(activeTab.filePath ?? undefined, text)
-    if (path) {
-      setTabs(prev => prev.map(t =>
-        t.id === activeTabId ? { ...t, filePath: path, content: text, modified: false } : t
-      ))
-      setSourceText(text)
-      addRecent(path)
-    }
-  }, [activeTab, activeTabId, getMarkdown, setSourceText])
+    await performSave(activeTab, text, true)
+  }, [activeTab, getMarkdown, performSave])
 
   const saveAsDoc = useCallback(async () => {
     if (!activeTab) return
     const text = getMarkdown()
-    const path = await window.api.saveFile(undefined, text)
-    if (path) {
-      setTabs(prev => prev.map(t =>
-        t.id === activeTabId ? { ...t, filePath: path, content: text, modified: false } : t
-      ))
-      setSourceText(text)
-      addRecent(path)
-    }
-  }, [activeTab, activeTabId, getMarkdown, setSourceText])
+    await performSave(activeTab, text, true)
+  }, [activeTab, getMarkdown, performSave])
 
-  const saveUnsavedTab = useCallback(async (tab: TabDoc) => {
+  const saveUnsavedTab = useCallback(async (tab: TabDoc): Promise<boolean> => {
     if (tab.id === activeTabId) {
-      const text = getMarkdown()
-      const path = await window.api.saveFile(tab.filePath ?? undefined, text)
-      if (path) {
-        setTabs(prev => prev.map(t =>
-          t.id === tab.id ? { ...t, filePath: path, content: text, modified: false } : t
-        ))
-        setSourceText(text)
-        addRecent(path)
-      }
-    } else {
-      const text = tab.content
-      const path = await window.api.saveFile(tab.filePath ?? undefined, text)
-      if (path) {
-        setTabs(prev => prev.map(t =>
-          t.id === tab.id ? { ...t, filePath: path, content: text, modified: false } : t
-        ))
-      }
+      return performSave(tab, getMarkdown(), true)
     }
-  }, [activeTabId, getMarkdown, setSourceText])
+    return performSave(tab, tab.content, false)
+  }, [activeTabId, getMarkdown, performSave])
 
   const openTab = useCallback((tab: TabDoc) => {
     syncEditorToTab()
@@ -187,14 +173,7 @@ export function useTabs({
       const result = await confirmCloseDocument(activeTab)
       if (result === 'cancel') return
       if (result === 'save') {
-        const text = getMarkdown()
-        const path = await window.api.saveFile(activeTab.filePath ?? undefined, text)
-        if (!path) return
-        setTabs(prev => prev.map(t =>
-          t.id === activeTabId ? { ...t, filePath: path, content: text, modified: false } : t
-        ))
-        setSourceText(text)
-        addRecent(path)
+        if (!await performSave(activeTab, getMarkdown(), true)) return
       }
     }
     syncEditorToTab()
@@ -202,7 +181,7 @@ export function useTabs({
     setTabs(prev => [...prev, tab])
     setActiveTabId(tab.id)
     loadTabIntoEditor(tab)
-  }, [activeTab, activeTabId, syncEditorToTab, loadTabIntoEditor, getMarkdown, setSourceText])
+  }, [activeTab, syncEditorToTab, loadTabIntoEditor, performSave, getMarkdown])
 
   const loadContent = useCallback((md: string, filePath: string | null) => {
     syncEditorToTab()
@@ -224,21 +203,14 @@ export function useTabs({
       const result = await confirmCloseDocument(activeTab)
       if (result === 'cancel') return
       if (result === 'save') {
-        const text = getMarkdown()
-        const path = await window.api.saveFile(activeTab.filePath ?? undefined, text)
-        if (!path) return
-        setTabs(prev => prev.map(t =>
-          t.id === activeTabId ? { ...t, filePath: path, content: text, modified: false } : t
-        ))
-        setSourceText(text)
-        addRecent(path)
+        if (!await performSave(activeTab, getMarkdown(), true)) return
       }
     }
     const result = await window.api.openFile()
     if (!result) return
     loadContent(result.content, result.filePath)
     addRecent(result.filePath)
-  }, [activeTab, activeTabId, loadContent, syncEditorToTab, getMarkdown, setSourceText])
+  }, [activeTab, loadContent, syncEditorToTab, performSave, getMarkdown])
 
   const openFileFromExplorer = useCallback(async (path: string) => {
     if (activeTab?.modified) {
@@ -246,14 +218,7 @@ export function useTabs({
       const result = await confirmCloseDocument(activeTab)
       if (result === 'cancel') return
       if (result === 'save') {
-        const text = getMarkdown()
-        const savePath = await window.api.saveFile(activeTab.filePath ?? undefined, text)
-        if (!savePath) return
-        setTabs(prev => prev.map(t =>
-          t.id === activeTabId ? { ...t, filePath: savePath, content: text, modified: false } : t
-        ))
-        setSourceText(text)
-        addRecent(savePath)
+        if (!await performSave(activeTab, getMarkdown(), true)) return
       }
     }
     try {
@@ -261,7 +226,7 @@ export function useTabs({
       loadContent(content, path)
       addRecent(path)
     } catch { /* file not found */ }
-  }, [activeTab, activeTabId, loadContent, syncEditorToTab, getMarkdown, setSourceText])
+  }, [activeTab, loadContent, syncEditorToTab, performSave, getMarkdown])
 
   const selectTab = useCallback((id: string) => {
     if (id === activeTabId) return
@@ -279,9 +244,9 @@ export function useTabs({
       syncEditorToTab()
       const result = await confirmCloseDocument(tab)
       if (result === 'cancel') return
-      if (result === 'save') {
-        await saveUnsavedTab(tab)
-      }
+      // Si el guardado falla, la pestaña no se cierra: su contenido solo
+      // existe en memoria y cerrarla significaría perderlo.
+      if (result === 'save' && !await saveUnsavedTab(tab)) return
     }
     const next = tabs.filter(t => t.id !== id)
     setTabs(next)
@@ -308,7 +273,8 @@ export function useTabs({
       if (result === 'cancel') return
       if (result === 'save') {
         for (const t of toClose) {
-          await saveUnsavedTab(t)
+          // Si un guardado falla se aborta toda la operación (sin pérdida).
+          if (!await saveUnsavedTab(t)) return
         }
       }
     }
@@ -329,7 +295,8 @@ export function useTabs({
       if (result === 'cancel') return
       if (result === 'save') {
         for (const t of modified) {
-          await saveUnsavedTab(t)
+          // Si un guardado falla se aborta toda la operación (sin pérdida).
+          if (!await saveUnsavedTab(t)) return
         }
       }
     }
@@ -350,7 +317,8 @@ export function useTabs({
       if (result === 'cancel') return
       if (result === 'save') {
         for (const t of toClose) {
-          await saveUnsavedTab(t)
+          // Si un guardado falla se aborta toda la operación (sin pérdida).
+          if (!await saveUnsavedTab(t)) return
         }
       }
     }
@@ -368,12 +336,10 @@ export function useTabs({
     const ed = editorRef.current
     const unsaved = tabs.filter(t => t.modified || !t.filePath)
     if (unsaved.length === 0) {
-      console.log('[P12:CS] closeSaved ALL tabs, clearing content')
       setTabs([])
       setActiveTabId(null)
       setShowWelcome(true)
       ed?.commands.clearContent()
-      console.log('[P12:CS] after clearContent, getHTML:', JSON.stringify(ed?.getHTML()))
     } else {
       setTabs(unsaved)
       if (!unsaved.find(t => t.id === activeTabId)) {

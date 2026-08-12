@@ -29,15 +29,43 @@ interface SearchReplaceProps {
 function findMatches(editor: Editor, query: string): { from: number; to: number }[] {
   if (!query) return []
   const doc = editor.state.doc
-  const text = doc.textBetween(0, doc.content.size, '\n', '')
-  const matches: { from: number; to: number }[] = []
   const lower = query.toLowerCase()
-  let pos = 0
+  const matches: { from: number; to: number }[] = []
+
+  // Construye el texto plano del documento mapeando cada carácter a su
+  // posición real en el doc. textBetween() devuelve un string cuyos índices
+  // NO corresponden a posiciones del documento en docs multi-bloque, así que
+  // se recorren los nodos con descendants y se acumula la posición real.
+  let text = ''
+  const positions: number[] = []
+  let hasText = false
+
+  doc.descendants((node, pos) => {
+    if (node.isText && node.text) {
+      const start = pos // un text node en `pos` ocupa [pos, pos+len)
+      for (let i = 0; i < node.text.length; i++) {
+        text += node.text[i]
+        positions.push(start + i)
+      }
+      hasText = true
+    } else if (node.isBlock && hasText) {
+      text += '\n'
+      positions.push(-1) // separador de bloque, sin posición real
+    }
+    return true
+  })
+
+  let idx = 0
   while (true) {
-    const idx = text.toLowerCase().indexOf(lower, pos)
+    idx = text.toLowerCase().indexOf(lower, idx)
     if (idx === -1) break
-    matches.push({ from: idx, to: idx + query.length })
-    pos = idx + 1
+    const endIdx = idx + query.length - 1
+    const span = positions.slice(idx, endIdx + 1)
+    // Descarta matches que crucen separadores de bloque (no son contiguos).
+    if (span.length === query.length && !span.includes(-1)) {
+      matches.push({ from: span[0], to: span[span.length - 1] + 1 })
+    }
+    idx += 1
   }
   return matches
 }
@@ -64,7 +92,7 @@ export function SearchReplace({ editor, onClose, initialFocus = 'search' }: Sear
     setMatches(m)
     setMatchIdx(0)
     if (m.length > 0) {
-      editor.commands.setTextSelection({ from: m[0].from + 1, to: m[0].to + 1 })
+      editor.commands.setTextSelection({ from: m[0].from, to: m[0].to })
       editor.commands.scrollIntoView()
     }
   }, [search, editor])
@@ -79,7 +107,7 @@ export function SearchReplace({ editor, onClose, initialFocus = 'search' }: Sear
     if (!editor) return
     const actives = new Set(matchIdx >= 0 && matchIdx < matches.length ? [matches[matchIdx]] : [])
     const decos = matches.map((m, i) =>
-      Decoration.inline(m.from + 1, m.to + 1, {
+      Decoration.inline(m.from, m.to, {
         class: i === matchIdx ? 'search-match-active' : 'search-match-highlight'
       })
     )
@@ -92,14 +120,14 @@ export function SearchReplace({ editor, onClose, initialFocus = 'search' }: Sear
     if (matches.length === 0) return
     const i = ((idx % matches.length) + matches.length) % matches.length
     setMatchIdx(i)
-    editor?.commands.setTextSelection({ from: matches[i].from + 1, to: matches[i].to + 1 })
+    editor?.commands.setTextSelection({ from: matches[i].from, to: matches[i].to })
     editor?.commands.scrollIntoView()
   }, [matches, editor])
 
   const replaceOne = useCallback(() => {
     if (!editor || matches.length === 0) return
     const { from, to } = matches[matchIdx]
-    editor.chain().focus().deleteRange({ from: from + 1, to: to + 1 }).insertContent(replace).run()
+    editor.chain().focus().deleteRange({ from, to }).insertContent(replace).run()
     setSearch(s => s)
   }, [editor, matches, matchIdx, replace])
 
@@ -110,7 +138,7 @@ export function SearchReplace({ editor, onClose, initialFocus = 'search' }: Sear
     let tr = editor.state.tr
     for (let i = m.length - 1; i >= 0; i--) {
       const { from, to } = m[i]
-      tr = tr.replaceWith(from + 1, to + 1, editor.state.schema.text(replace))
+      tr = tr.replaceWith(from, to, editor.state.schema.text(replace))
     }
     editor.view.dispatch(tr)
     setSearch('')

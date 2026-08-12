@@ -81,10 +81,3 @@ export const FORMATTING_HINTS: Record<string, MarkdownHint> = {
   }
 }
 
-export function markdownHintSeen(id: string): boolean {
-  return localStorage.getItem(`marknote-hint-${id}`) === 'true'
-}
-
-export function markdownHintMarkSeen(id: string): void {
-  localStorage.setItem(`marknote-hint-${id}`, 'true')
-}

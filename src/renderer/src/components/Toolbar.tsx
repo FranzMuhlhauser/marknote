@@ -51,22 +51,18 @@ export function Toolbar({
   const hintRect = useRef<DOMRect | null>(null)
 
   const handleMouseEnter = useCallback((id: string, e: React.MouseEvent<HTMLButtonElement>) => {
-    console.log('[DEBUG] handleMouseEnter', id)
     if (!hasActiveDocument) return
     if (leaveTimer.current) clearTimeout(leaveTimer.current)
-    if (hintState?.id === id) { console.log('[DEBUG] already showing same hint', id); return }
+    if (hintState?.id === id) return
 
     activeId.current = id
     const hint = FORMATTING_HINTS[id]
-    if (!hint) { console.log('[DEBUG] no hint for', id); return }
+    if (!hint) return
 
     hintRect.current = e.currentTarget.getBoundingClientRect()
-    console.log('[DEBUG] scheduling hint for', id, 'rect:', hintRect.current)
 
     enterTimer.current = setTimeout(() => {
-      console.log('[DEBUG] timer fired for', id, 'activeId:', activeId.current)
-      if (activeId.current !== id) { console.log('[DEBUG] stale timer, skipping'); return }
-      console.log('[DEBUG] setting hintState for', id, 'rect:', hintRect.current)
+      if (activeId.current !== id) return
       setHintState({
         id,
         data: { id, type: 'toolbar', data: hint, anchorRect: hintRect.current! }
@@ -75,14 +71,11 @@ export function Toolbar({
   }, [hintState, hasActiveDocument])
 
   const handleMouseLeave = useCallback(() => {
-    console.log('[DEBUG] handleMouseLeave')
     activeId.current = null
     if (enterTimer.current) clearTimeout(enterTimer.current)
 
     if (hintState) {
-      console.log('[DEBUG] scheduling hide')
       leaveTimer.current = setTimeout(() => {
-        console.log('[DEBUG] hiding hint')
         setHintState(null)
       }, HINT_HIDE_DELAY)
     }
@@ -245,13 +238,11 @@ export function Toolbar({
       <div className="toolbar-group">
         <button className="toolbar-btn" onClick={onMentor} title="Mentor Markdown (Ctrl+Shift+P)" disabled={!hasActiveDocument}>🤖</button>
       </div>
-      {console.log('[DEBUG] render hintState:', hintState)}
       {hintState && (
         <MarkdownHintCard
           hint={hintState.data.data}
           anchorRect={hintState.data.anchorRect}
           onClose={() => {
-            console.log('[DEBUG] hint onClose')
             setHintState(null)
             if (leaveTimer.current) clearTimeout(leaveTimer.current)
           }}

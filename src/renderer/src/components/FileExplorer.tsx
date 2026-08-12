@@ -151,9 +151,15 @@ export function FileExplorer({ folder, currentFile, onOpenFile, onOpenFolder, on
   const [fileError, setFileError] = useState<string | null>(null)
 
   const refreshLists = useCallback(() => {
-    setFavorites(getFavorites())
-    setRecent(getRecent())
-    setTrash(getTrash())
+    const favs = getFavorites()
+    const recents = getRecent()
+    const trashes = getTrash()
+    setFavorites(favs)
+    setRecent(recents)
+    setTrash(trashes)
+    // Autoriza .md conocidos (favoritos/recientes/papelera) para que
+    // eliminar/renombrar funcionen sin abrir el archivo primero.
+    window.api.seedPaths([...favs, ...recents, ...trashes])
   }, [])
 
   const refreshFiles = useCallback(() => {

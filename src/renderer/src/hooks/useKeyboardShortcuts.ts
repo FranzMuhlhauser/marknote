@@ -3,6 +3,13 @@ import { getTabTitle } from '../components/TabBar'
 
 let forceClose = false
 
+interface UnsavedTab {
+  id: string
+  filePath: string | null
+  modified: boolean
+  content: string
+}
+
 interface UseKeyboardShortcutsParams {
   saveDoc: () => Promise<void>
   saveAsDoc: () => Promise<void>
@@ -14,9 +21,9 @@ interface UseKeyboardShortcutsParams {
   toggleSource: () => void
   activeTabId: string | null
   tabs: Array<{ id: string }>
-  tabsModified: Array<{ id: string; filePath: string | null; modified: boolean; content: string }>
+  tabsModified: UnsavedTab[]
   showSource: boolean
-  getMarkdown: () => string
+  saveUnsavedTab: (tab: UnsavedTab) => Promise<boolean>
   setShowSearch: (v: boolean | ((prev: boolean) => boolean)) => void
   setSearchMode: (v: 'search' | 'replace') => void
   setShowPalette: (v: boolean | ((prev: boolean) => boolean)) => void
@@ -25,24 +32,18 @@ interface UseKeyboardShortcutsParams {
   setShowSettings: (v: boolean) => void
   setTableMenuPos: (v: any) => void
   setTablePickerPos: (v: any) => void
-  setShowWelcome: (v: boolean) => void
-  setTabs: (v: any) => void
-  setSourceText: (v: string) => void
   setPendingConfirm: (v: any) => void
-  setActiveTabId: (v: any) => void
-  activeTab: { id: string; filePath: string | null; content: string; modified: boolean } | null
 }
 
 export function useKeyboardShortcuts({
   saveDoc, saveAsDoc, openDoc, openFolder, newDoc,
   closeTab, selectTab, toggleSource,
   activeTabId, tabs, tabsModified,
-  showSource, getMarkdown,
+  showSource, saveUnsavedTab,
   setShowSearch, setSearchMode, setShowPalette,
   setShowExplorer, setFocusMode, setShowSettings,
   setTableMenuPos, setTablePickerPos,
-  setShowWelcome, setTabs, setSourceText, setPendingConfirm, setActiveTabId,
-  activeTab,
+  setPendingConfirm,
 }: UseKeyboardShortcutsParams) {
   // Keyboard shortcuts
   useEffect(() => {
@@ -127,28 +128,12 @@ export function useKeyboardShortcuts({
               label: 'Guardar', className: 'confirm-btn-save',
               onClick: async () => {
                 setPendingConfirm(null)
-                let ok = false
-                if (tab.id === activeTabId) {
-                  const text = getMarkdown()
-                  const path = await window.api.saveFile(tab.filePath ?? undefined, text)
-                  if (path) {
-                    setTabs((prev: any[]) => prev.map((t2: any) =>
-                      t2.id === tab.id ? { ...t2, filePath: path, content: text, modified: false } : t2
-                    ))
-                    setSourceText(text)
-                    ok = true
-                  }
-                } else {
-                  const text = tab.content
-                  const path = await window.api.saveFile(tab.filePath ?? undefined, text)
-                  if (path) {
-                    setTabs((prev: any[]) => prev.map((t2: any) =>
-                      t2.id === tab.id ? { ...t2, filePath: path, content: text, modified: false } : t2
-                    ))
-                    ok = true
-                  }
+                // Solo se sale si el guardado tuvo éxito; si falla, el toast de
+                // performSave informa el error y la app permanece abierta.
+                if (await saveUnsavedTab(tab)) {
+                  forceClose = true
+                  window.api.quit()
                 }
-                if (ok) { forceClose = true; window.api.quit() }
               }
             },
             {
@@ -177,25 +162,12 @@ export function useKeyboardShortcuts({
                 setPendingConfirm(null)
                 let allOk = true
                 for (const t of unsaved) {
-                  if (t.id === activeTabId) {
-                    const text = getMarkdown()
-                    const path = await window.api.saveFile(t.filePath ?? undefined, text)
-                    if (path) {
-                      setTabs((prev: any[]) => prev.map((t2: any) =>
-                        t2.id === t.id ? { ...t2, filePath: path, content: text, modified: false } : t2
-                      ))
-                      setSourceText(text)
-                    } else { allOk = false }
-                  } else {
-                    const path = await window.api.saveFile(t.filePath ?? undefined, t.content)
-                    if (path) {
-                      setTabs((prev: any[]) => prev.map((t2: any) =>
-                        t2.id === t.id ? { ...t2, filePath: path, content: t.content, modified: false } : t2
-                      ))
-                    } else { allOk = false }
-                  }
+                  if (!await saveUnsavedTab(t)) { allOk = false; break }
                 }
-                if (allOk) { forceClose = true; window.api.quit() }
+                if (allOk) {
+                  forceClose = true
+                  window.api.quit()
+                }
               }
             },
             {
@@ -217,5 +189,5 @@ export function useKeyboardShortcuts({
     }
     window.addEventListener('beforeunload', handler)
     return () => window.removeEventListener('beforeunload', handler)
-  }, [tabsModified, activeTabId, getMarkdown, setPendingConfirm, setTabs, setSourceText, setActiveTabId, activeTab])
+  }, [tabsModified, saveUnsavedTab, setPendingConfirm])
 }

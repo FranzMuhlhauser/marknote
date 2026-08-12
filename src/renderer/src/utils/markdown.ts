@@ -1,5 +1,6 @@
 import MarkdownIt from 'markdown-it'
 import Turndown from 'turndown'
+import DOMPurify from 'dompurify'
 
 const md = new MarkdownIt({ html: true, linkify: true, typographer: true })
 const turndown = new Turndown({ headingStyle: 'atx', codeBlockStyle: 'fenced' })
@@ -189,42 +190,12 @@ function preprocessMath(source: string): string {
 }
 
 export function mdToHtml(source: string): string {
-  console.log('[P12:MD] INPUT:', JSON.stringify(source))
-  const result = md.render(preprocessTaskLists(preprocessMath(source)))
-  console.log('[P12:MD] OUTPUT:', JSON.stringify(result))
-  return result
+  const html = md.render(preprocessTaskLists(preprocessMath(source)))
+  // El Markdown puede contener HTML crudo (html: true); se sanea antes de
+  // insertarlo en el editor para neutralizar scripts/eventos maliciosos.
+  return DOMPurify.sanitize(html)
 }
 
 export function htmlToMd(html: string): string {
-  console.log('[P12:HM] INPUT:', JSON.stringify(html))
-  const result = turndown.turndown(html)
-  console.log('[P12:HM] OUTPUT:', JSON.stringify(result))
-  return result
+  return turndown.turndown(html)
 }
-
-export const DEFAULT_MD = `# Welcome to Marknote
-
-Start typing in **Markdown** — see the result *instantly*.
-
-## Features
-
-- **Bold**, *italic*, ~~strikethrough~~, ==highlight==, \`inline code\`
-- Headings, lists, and [links](https://example.com)
-- Tables, task lists, and code blocks
-- Math with KaTeX: $E = mc^2$
-- Diagrams with Mermaid
-
-### Example Table
-
-| Feature | Status |
-|---------|--------|
-| Tables  | ✅     |
-| Math    | ✅     |
-
-\`\`\`js
-console.log('Hello, Marknote!')
-\`\`\`
-
-- [x] Task one
-- [ ] Task two
-`

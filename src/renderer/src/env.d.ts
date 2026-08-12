@@ -1,13 +1,19 @@
 /// <reference types="vite/client" />
 
+interface SaveResult {
+  ok: boolean
+  path?: string
+  error?: string
+}
+
 interface FileAPI {
   openFile: () => Promise<{ filePath: string; content: string } | null>
   openCsvFile: () => Promise<{ filePath: string; content: string } | null>
-  saveFile: (filePath?: string, content?: string) => Promise<string | null>
+  saveFile: (filePath?: string, content?: string) => Promise<SaveResult | null>
   openFolder: () => Promise<string | null>
   listFiles: (folderPath: string) => Promise<{ name: string; path: string }[]>
   readFile: (filePath: string) => Promise<string>
-  writeFile: (filePath: string, content: string) => Promise<void>
+  writeFile: (filePath: string, content: string) => Promise<SaveResult>
   onUpdateStatus: (callback: (status: string, payload?: any) => void) => void
   startDownloadUpdate: () => Promise<void>
   installUpdate: () => Promise<void>
@@ -19,6 +25,7 @@ interface FileAPI {
   deleteFile: (filePath: string) => Promise<void>
   moveFile: (oldPath: string, newPath: string) => Promise<void>
   getStartupFile: () => Promise<string | null>
+  seedPaths: (paths: string[]) => Promise<void>
   addCustomWord: (word: string) => Promise<void>
   removeCustomWord: (word: string) => Promise<void>
   addCustomWords: (words: string[]) => Promise<void>

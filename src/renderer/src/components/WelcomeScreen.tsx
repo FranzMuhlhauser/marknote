@@ -3,7 +3,7 @@ const tips = [
   'Ctrl+Shift+P abre la paleta de comandos.',
   'Ctrl+F para buscar y reemplazar texto.',
   'Usa / en el editor para acceder a comandos rápidos.',
-  'F11 alterna el modo pantalla completa.',
+  'F11 alterna el Modo Enfoque.',
 ]
 
 interface WelcomeScreenProps {

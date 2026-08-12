@@ -1,16 +1,7 @@
 import { Node, mergeAttributes } from '@tiptap/core'
 import { NodeViewWrapper, ReactNodeViewRenderer } from '@tiptap/react'
 import { useCallback, useRef, useState, useEffect } from 'react'
-
-const youtubeRegex = /(?:youtube\.com\/(?:watch\?v=|embed\/)|youtu\.be\/)([a-zA-Z0-9_-]{11})/
-
-function parseVideoUrl(url: string): { type: 'youtube' | 'url'; src: string } {
-  const match = url.match(youtubeRegex)
-  if (match) {
-    return { type: 'youtube', src: `https://www.youtube.com/embed/${match[1]}` }
-  }
-  return { type: 'url', src: url }
-}
+import { parseVideoUrl } from '../utils/video'
 
 export const VideoBlock = Node.create({
   name: 'videoBlock',

@@ -34,7 +34,7 @@ const steps: OnboardingStep[] = [
   },
   {
     title: 'Atajos Útiles',
-    description: 'Ctrl+F: Buscar | Ctrl+S: Guardar | F11: Pantalla completa | Ctrl+Z: Deshacer | Ctrl+Shift+P: Paleta de comandos',
+    description: 'Ctrl+F: Buscar | Ctrl+S: Guardar | F11: Modo Enfoque | Ctrl+Z: Deshacer | Ctrl+Shift+P: Paleta de comandos',
     icon: '⚡'
   },
   {

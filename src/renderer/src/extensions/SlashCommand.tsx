@@ -4,6 +4,8 @@ import { PluginKey } from '@tiptap/pm/state'
 import { createRoot, Root } from 'react-dom/client'
 import { showPrompt } from '../utils/prompt'
 import { openTablePicker } from '../utils/tablePicker'
+import { parseVideoUrl } from '../utils/video'
+import { pickImageAsDataURL } from '../utils/fileUtils'
 
 interface CommandItem {
   label: string
@@ -17,8 +19,8 @@ const items: CommandItem[] = [
     const coords = e.view.coordsAtPos(e.state.selection.from)
     openTablePicker(e, { x: coords.left, y: coords.bottom + 4 })
   } },
-  { label: 'Imagen', icon: '🖼', description: 'Insertar imagen', command: (e: any) => { const i = document.createElement('input'); i.type = 'file'; i.accept = 'image/*'; i.onchange = () => { const f = i.files?.[0]; if (!f) return; const r = new FileReader(); r.onload = () => e.chain().focus().setImage({ src: r.result as string }).run(); r.readAsDataURL(f) }; i.click() } },
-  { label: 'Video', icon: '🎬', description: 'Insertar video o YouTube', command: async (e: any) => { const u = await showPrompt('URL del video (YouTube o directa):'); if (!u) return; const m = u.match(/(?:youtube\.com\/(?:watch\?v=|embed\/)|youtu\.be\/)([a-zA-Z0-9_-]{11})/); e.chain().focus().insertContent({ type: 'videoBlock', attrs: m ? { src: `https://www.youtube.com/embed/${m[1]}`, type: 'youtube' } : { src: u, type: 'url' } }).run() } },
+  { label: 'Imagen', icon: '🖼', description: 'Insertar imagen', command: async (e: any) => { const src = await pickImageAsDataURL(); if (!src) return; e.chain().focus().setImage({ src }).run() } },
+  { label: 'Video', icon: '🎬', description: 'Insertar video o YouTube', command: async (e: any) => { const u = await showPrompt('URL del video (YouTube o directa):'); if (!u) return; const { type, src } = parseVideoUrl(u); e.chain().focus().insertContent({ type: 'videoBlock', attrs: { type, src } }).run() } },
   { label: 'Enlace', icon: '🔗', description: 'Insertar enlace', command: async (e: any) => { const u = await showPrompt('URL:'); if (u) e.chain().focus().setLink({ href: u }).run() } },
   { label: 'Código', icon: '{}', description: 'Insertar bloque de código', command: (e: any) => e.chain().focus().toggleCodeBlock().run() },
   { label: 'Mermaid', icon: '📊', description: 'Insertar diagrama Mermaid', command: (e: any) => e.chain().focus().insertContent({ type: 'mermaidBlock', attrs: { code: '' } }).run() },

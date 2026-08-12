@@ -34,7 +34,7 @@
 ├──────────┬───────────────────────────┬────────────────┤
 │          │                           │                │
 │  📁 Proy │   Editor WYSIWYG          │  📋 Índice     │
-│  ★ Favo  │   (850px max-width)       │  • Intro       │
+│  ★ Favo  │   (960px max-width)       │  • Intro       │
 │  🕐 Reci │                           │  • Features    │
 │  🗑 Pape │   Escribe en Markdown,    │  • Instalación │
 │          │   ve el resultado en vivo  │                │
@@ -48,7 +48,7 @@
 
 ### Editor Profesional
 - **Edición WYSIWYG** con TipTap/ProseMirror — escribe Markdown, ves el resultado en tiempo real
-- **Ancho máximo 850px** centrado, márgenes amplios, tipografía cómoda para largas sesiones
+- **Ancho máximo 960px** centrado, márgenes amplios, tipografía cómoda para largas sesiones
 - **Resaltado de línea actual**, scroll suave, cursor visible
 - **Vista fuente** para editar Markdown directamente
 - **Arrastrar y soltar imágenes** desde el explorador de archivos
@@ -87,7 +87,8 @@
 - **Menú contextual en pestañas**: cerrar, cerrar otros, cerrar a la derecha, cerrar todos, cerrar guardados
 - **Explorador lateral** con Favoritos ★, Recientes 🕐, Proyecto 📂, Papelera 🗑
 - **Operaciones avanzadas**: crear archivo/carpeta, renombrar, duplicar, eliminar, arrastrar y soltar
-- **Autoguardado** cada 30s
+- **Guardado manual** (Ctrl+S) con confirmación al salir si hay cambios sin guardar
+- **Importar CSV/TSV** como tabla Markdown (menú Archivo o drag & drop)
 
 ### Temas
 - **6 temas predefinidos**: Claro, Oscuro, Nord, Dracula, Solarized, GitHub
@@ -173,8 +174,10 @@ El comando `package:win` genera un instalador NSIS en `dist-electron/`.
 | `Ctrl+B` | Negrita |
 | `Ctrl+I` | Cursiva |
 | `Ctrl+U` | Subrayado |
-| `Ctrl+1/2/3` | Encabezado H1/H2/H3 |
-| `F11` | Pantalla completa |
+| `Ctrl+Shift+M` | Alternar vista fuente Markdown |
+| `Ctrl+Shift+O` | Abrir carpeta |
+| `F9` | Explorador de archivos |
+| `F11` | Modo Enfoque |
 | `Escape` | Cerrar diálogos |
 
 ## Roadmap

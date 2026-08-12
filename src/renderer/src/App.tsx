@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useRef } from 'react'
+import { useCallback, useEffect, useRef } from 'react'
 import { useEditor, EditorContent } from '@tiptap/react'
 import { getExtensions } from './extensions'
 import { Toolbar } from './components/Toolbar'
@@ -19,6 +19,7 @@ import { TableSizePicker } from './components/TableSizePicker'
 import { ConfirmDialog } from './components/ConfirmDialog'
 import { mdToHtml, htmlToMd } from './utils/markdown'
 import { parseDelimitedText, insertTableData, showToast } from './utils/tableParser'
+import { readFileAsDataURL, readFileAsText } from './utils/fileUtils'
 import { addCustomWord } from './utils/customDictionary'
 import { exportHtml, exportPdf } from './utils/export'
 import { useEditorState } from './hooks/useEditorState'
@@ -59,21 +60,37 @@ function App() {
 
   // Refs to avoid stale closures in useEditor callbacks
   const activeTabIdRef = useRef<string | null>(null)
-  const pendingSourceContentRef = useRef<string | null>(null)
+  const htmlToMdDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const editor = useEditor({
     extensions: getExtensions(),
     content: '',
     onUpdate: ({ editor: ed }) => {
       if (tabs.switchingTab.current || !activeTabIdRef.current) {
-        console.log('[P12:OU] SKIPPED (switchingTab or no activeTabId)', 'switchingTab:', tabs.switchingTab.current, 'activeTabIdRef:', activeTabIdRef.current)
         return
       }
-      const md = htmlToMd(ed.getHTML())
-      console.log('[P12:OU] saving, activeTabId:', activeTabIdRef.current, 'md length:', md.length, 'md preview:', JSON.stringify(md.slice(0, 200)))
+      const tabId = activeTabIdRef.current
+      // modified se marca de inmediato: el diálogo de "cambios sin guardar"
+      // al cerrar pestañas o salir de la app depende de este flag y no puede
+      // esperar al debounce (habría una ventana de pérdida de ediciones).
       tabs.setTabs((prev: any[]) => prev.map((t: any) =>
-        t.id === activeTabIdRef.current ? { ...t, content: md, modified: t.modified || md !== t.content } : t
+        t.id === tabId ? { ...t, modified: true } : t
       ))
+      // htmlToMd (turndown) recorre el documento completo; el snapshot de
+      // contenido se difiere hasta que el usuario deje de escribir.
+      if (htmlToMdDebounceRef.current) {
+        clearTimeout(htmlToMdDebounceRef.current)
+      }
+      htmlToMdDebounceRef.current = setTimeout(() => {
+        htmlToMdDebounceRef.current = null
+        // Si cambió de pestaña mientras se esperaba, syncEditorToTab ya
+        // capturó el contenido y este snapshot sería de otra pestaña.
+        if (activeTabIdRef.current !== tabId) return
+        const md = htmlToMd(ed.getHTML())
+        tabs.setTabs((prev: any[]) => prev.map((t: any) =>
+          t.id === tabId ? { ...t, content: md } : t
+        ))
+      }, 250)
     },
     editorProps: {
       attributes: {
@@ -102,21 +119,17 @@ function App() {
         for (const file of files) {
           if (file.type.startsWith('image/')) {
             event.preventDefault()
-            const reader = new FileReader()
-            reader.onload = () => {
+            readFileAsDataURL(file).then(src => {
               view.dispatch(view.state.tr.replaceSelectionWith(
-                view.state.schema.nodes.image.create({ src: reader.result as string })
+                view.state.schema.nodes.image.create({ src })
               ))
-            }
-            reader.readAsDataURL(file)
+            }, () => {})
             return true
           }
           const ext = file.name.split('.').pop()?.toLowerCase()
           if (ext === 'csv' || ext === 'tsv' || ext === 'txt') {
             event.preventDefault()
-            const reader = new FileReader()
-            reader.onload = () => {
-              const text = reader.result as string
+            readFileAsText(file).then(text => {
               const parsed = parseDelimitedText(text)
               if (!parsed) {
                 showToast('No se detectó un formato CSV, TSV o delimitado por |.')
@@ -124,8 +137,7 @@ function App() {
               }
               insertTableData(editor, parsed)
               showToast(`Tabla importada desde ${file.name}`)
-            }
-            reader.readAsText(file)
+            }, () => {})
             return true
           }
         }
@@ -153,6 +165,15 @@ function App() {
   useEffect(() => {
     activeTabIdRef.current = tabs.activeTabId
   }, [tabs.activeTabId])
+
+  // Cleanup del debounce de onUpdate al desmontar
+  useEffect(() => {
+    return () => {
+      if (htmlToMdDebounceRef.current) {
+        clearTimeout(htmlToMdDebounceRef.current)
+      }
+    }
+  }, [])
 
   // Wire editor ref to useTabs once editor is created
   useEffect(() => {
@@ -265,9 +286,7 @@ function App() {
       ui.setShowSource(true)
       setTimeout(() => ui.sourceRef.current?.focus(), 50)
     } else {
-      console.log('[P12:TS] toggleSource exit, sourceText:', JSON.stringify(ui.sourceText))
       const html = mdToHtml(ui.sourceText)
-      console.log('[P12:TS] mdToHtml output length:', html.length)
 
       // Suppress onUpdate during setContent to avoid round-trip feedback loop
       const prevActiveId = activeTabIdRef.current
@@ -282,22 +301,9 @@ function App() {
         ))
       }
 
-      pendingSourceContentRef.current = null
       ui.setShowSource(false)
     }
   }, [editor, ui.showSource, ui.sourceText, tabs.getMarkdown, tabs.setTabs, tabs.activeTabId, mdToHtml])
-
-  // Safety net: if toggleSource did not set content (edge case), do it here
-  useLayoutEffect(() => {
-    if (!ui.showSource && pendingSourceContentRef.current !== null) {
-      const content = pendingSourceContentRef.current
-      if (!tabs.switchingTab.current && editor) {
-        pendingSourceContentRef.current = null
-        console.log('[P12:LE] fallback: setContent from pendingSourceContentRef')
-        editor.commands.setContent(mdToHtml(content))
-      }
-    }
-  }, [ui.showSource, editor])
 
   const toggleTheme = useCallback(() => {
     ui.setTheme((prev: any) => {
@@ -319,7 +325,7 @@ function App() {
     tabs: tabs.tabs,
     tabsModified: tabs.tabs,
     showSource: ui.showSource,
-    getMarkdown: tabs.getMarkdown,
+    saveUnsavedTab: tabs.saveUnsavedTab,
     setShowSearch: ui.setShowSearch,
     setSearchMode: ui.setSearchMode,
     setShowPalette: ui.setShowPalette,
@@ -328,12 +334,7 @@ function App() {
     setShowSettings: ui.setShowSettings,
     setTableMenuPos: ui.setTableMenuPos,
     setTablePickerPos: ui.setTablePickerPos,
-    setShowWelcome: ui.setShowWelcome,
-    setTabs: tabs.setTabs,
-    setSourceText: ui.setSourceText,
     setPendingConfirm: ui.setPendingConfirm,
-    setActiveTabId: tabs.setActiveTabId,
-    activeTab: tabs.activeTab,
   })
 
   return (

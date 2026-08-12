@@ -3,6 +3,7 @@ import type { Editor } from '@tiptap/core'
 import { showPrompt } from '../utils/prompt'
 import { openTablePicker } from '../utils/tablePicker'
 import { parseDelimitedText, insertTableData, showToast } from '../utils/tableParser'
+import { pickImageAsDataURL } from '../utils/fileUtils'
 
 interface Cmd {
   id: string
@@ -16,9 +17,9 @@ const COMMANDS: Cmd[] = [
   { id: 'italic', label: 'Cursiva', shortcut: 'Ctrl+I', action: e => e.chain().focus().toggleItalic().run() },
   { id: 'underline', label: 'Subrayado', shortcut: 'Ctrl+U', action: e => e.chain().focus().toggleUnderline().run() },
   { id: 'strike', label: 'Tachado', action: e => e.chain().focus().toggleStrike().run() },
-  { id: 'h1', label: 'Encabezado 1', shortcut: 'Ctrl+Alt+1', action: e => e.chain().focus().toggleHeading({ level: 1 }).run() },
-  { id: 'h2', label: 'Encabezado 2', shortcut: 'Ctrl+Alt+2', action: e => e.chain().focus().toggleHeading({ level: 2 }).run() },
-  { id: 'h3', label: 'Encabezado 3', shortcut: 'Ctrl+Alt+3', action: e => e.chain().focus().toggleHeading({ level: 3 }).run() },
+  { id: 'h1', label: 'Encabezado 1', action: e => e.chain().focus().toggleHeading({ level: 1 }).run() },
+  { id: 'h2', label: 'Encabezado 2', action: e => e.chain().focus().toggleHeading({ level: 2 }).run() },
+  { id: 'h3', label: 'Encabezado 3', action: e => e.chain().focus().toggleHeading({ level: 3 }).run() },
   { id: 'bullet', label: 'Lista con viñetas', action: e => e.chain().focus().toggleBulletList().run() },
   { id: 'ordered', label: 'Lista numerada', action: e => e.chain().focus().toggleOrderedList().run() },
   { id: 'task', label: 'Lista de tareas', action: e => e.chain().focus().toggleTaskList().run() },
@@ -35,17 +36,10 @@ const COMMANDS: Cmd[] = [
   { id: 'mermaid', label: 'Diagrama Mermaid', action: e => e.chain().focus().insertContent({ type: 'mermaidBlock', attrs: { code: '' } }).run() },
   { id: 'hr', label: 'Línea horizontal', action: e => e.chain().focus().setHorizontalRule().run() },
   { id: 'link', label: 'Insertar enlace', action: async e => { const url = await showPrompt('URL:'); if (url) e.chain().focus().setLink({ href: url }).run() } },
-  { id: 'image', label: 'Insertar imagen', action: e => {
-    const input = document.createElement('input')
-    input.type = 'file'; input.accept = 'image/*'
-    input.onchange = () => {
-      const file = input.files?.[0]
-      if (!file) return
-      const reader = new FileReader()
-      reader.onload = () => e.chain().focus().setImage({ src: reader.result as string }).run()
-      reader.readAsDataURL(file)
-    }
-    input.click()
+  { id: 'image', label: 'Insertar imagen', action: async e => {
+    const src = await pickImageAsDataURL()
+    if (!src) return
+    e.chain().focus().setImage({ src }).run()
   }},
   { id: 'csv-table', label: 'Convertir datos a tabla', action: async e => {
     const { from, to } = e.state.selection

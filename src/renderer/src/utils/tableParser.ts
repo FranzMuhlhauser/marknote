@@ -76,7 +76,7 @@ function detectDelimiter(lines: string[]): string | null {
   return counts[maxIdx] > 0 ? delimiters[maxIdx] : null
 }
 
-export function createTableNode(schema: any, headers: string[], rows: string[][]): any {
+function createTableNode(schema: any, headers: string[], rows: string[][]): any {
   const cell = (type: string, text: string) => {
     const p = text
       ? schema.nodes.paragraph.create({}, schema.text(text))

@@ -23,11 +23,35 @@ import { ResizableImage } from './ResizableImage'
 import { VideoBlock } from './VideoBlock'
 import { SlashCommand } from './SlashCommand'
 import { BoldItalic } from './BoldItalic'
-import { TableSort, tableSortKey } from './TableSort'
-
-export { tableSortKey }
+import { TableSort } from './TableSort'
 
 const lowlight = createLowlight(common)
+
+// Compartido entre celdas y encabezados: atributo `align` (left/center/right)
+// persistido como style inline, compatible con HTML y con el markdown-it de export.
+function withCellAlign() {
+  return {
+    addAttributes() {
+      return {
+        ...this.parent?.(),
+        align: {
+          default: null,
+          parseHTML: (el: HTMLElement) => {
+            const ta = el.style.textAlign
+            if (ta && ['left', 'center', 'right'].includes(ta)) return ta
+            const a = el.getAttribute('align')
+            if (a && ['left', 'center', 'right'].includes(a)) return a
+            return null
+          },
+          renderHTML: (attrs: { align?: string | null }) => {
+            if (!attrs.align) return {}
+            return { style: `text-align: ${attrs.align}` }
+          }
+        }
+      }
+    }
+  }
+}
 
 const CustomTable = Table.extend({
   addKeyboardShortcuts() {
@@ -90,48 +114,8 @@ export function getExtensions() {
     }).configure({ nested: true }),
     CustomTable,
     TableRow,
-    TableCell.extend({
-      addAttributes() {
-        return {
-          ...this.parent?.(),
-          align: {
-            default: null,
-            parseHTML: el => {
-              const ta = el.style.textAlign
-              if (ta && ['left', 'center', 'right'].includes(ta)) return ta
-              const a = el.getAttribute('align')
-              if (a && ['left', 'center', 'right'].includes(a)) return a
-              return null
-            },
-            renderHTML: attrs => {
-              if (!attrs.align) return {}
-              return { style: `text-align: ${attrs.align}` }
-            }
-          }
-        }
-      }
-    }),
-    TableHeader.extend({
-      addAttributes() {
-        return {
-          ...this.parent?.(),
-          align: {
-            default: null,
-            parseHTML: el => {
-              const ta = el.style.textAlign
-              if (ta && ['left', 'center', 'right'].includes(ta)) return ta
-              const a = el.getAttribute('align')
-              if (a && ['left', 'center', 'right'].includes(a)) return a
-              return null
-            },
-            renderHTML: attrs => {
-              if (!attrs.align) return {}
-              return { style: `text-align: ${attrs.align}` }
-            }
-          }
-        }
-      }
-    }),
+    TableCell.extend(withCellAlign()),
+    TableHeader.extend(withCellAlign()),
     Highlight,
     TextAlign.configure({ types: ['heading', 'paragraph'] }),
     CodeBlock.configure({ lowlight }),

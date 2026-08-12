@@ -24,6 +24,7 @@ const api = {
     ipcRenderer.on('file:open', (_event, filePath) => callback(filePath))
   },
   getStartupFile: () => ipcRenderer.invoke('app:getStartupFile'),
+  seedPaths: (paths: string[]) => ipcRenderer.invoke('paths:seed', paths),
   addCustomWord: (word: string) => ipcRenderer.invoke('spellcheck:addWord', word),
   removeCustomWord: (word: string) => ipcRenderer.invoke('spellcheck:removeWord', word),
   addCustomWords: (words: string[]) => ipcRenderer.invoke('spellcheck:addWords', words),
