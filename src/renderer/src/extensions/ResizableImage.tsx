@@ -1,4 +1,4 @@
-import { Node, mergeAttributes } from '@tiptap/core'
+import { Node, mergeAttributes, InputRule } from '@tiptap/core'
 import { NodeViewWrapper, ReactNodeViewRenderer } from '@tiptap/react'
 import { useCallback, useRef, useState, useEffect } from 'react'
 
@@ -13,6 +13,7 @@ export const ResizableImage = Node.create({
     return {
       src: { default: '' },
       alt: { default: '' },
+      title: { default: null },
       width: { default: null },
       height: { default: null },
       align: { default: 'center' } // left, center, right
@@ -32,6 +33,24 @@ export const ResizableImage = Node.create({
 
   addNodeView() {
     return ReactNodeViewRenderer(ImageComponent)
+  },
+
+  addInputRules() {
+    return [
+      new InputRule({
+        // ![alt](src "title") — convierte la sintaxis Markdown al escribir
+        find: /!\[(.+?)\]\((\S+?)(?:\s+"([^"]*)")?\)/,
+        handler: ({ state, range, match }) => {
+          const alt = match[1] || ''
+          const src = match[2] || ''
+          const title = match[3]
+          const attrs: Record<string, string> = { src, alt }
+          if (title) attrs.title = title
+          const { tr } = state
+          tr.replaceWith(range.from, range.to, this.type.create(attrs))
+        },
+      }),
+    ]
   }
 })
 
@@ -43,7 +62,20 @@ function ImageComponent({ node, updateAttributes, editor }: any) {
   const imgRef = useRef<HTMLImageElement>(null)
   const [resizing, setResizing] = useState<'se' | 'e' | 's' | null>(null)
 
-  const { src, alt, width, height, align } = node.attrs
+  const { src, alt, title, width, height, align } = node.attrs
+
+  // Las rutas locales (C:/..., file://, ./) no cargan como src en el navegador;
+  // se leen vía IPC y se reemplazan por su data URL para que la imagen se vea.
+  const isLocalPath = src && !/^(https?:|data:|blob:)/i.test(src)
+  useEffect(() => {
+    if (!isLocalPath) return
+    let cancelled = false
+    window.api.readImage(src).then(dataUrl => {
+      if (cancelled || !dataUrl) return
+      updateAttributes({ src: dataUrl })
+    })
+    return () => { cancelled = true }
+  }, [src, isLocalPath, updateAttributes])
 
   const handleAltSave = useCallback(() => {
     updateAttributes({ alt: altText })
@@ -103,6 +135,7 @@ function ImageComponent({ node, updateAttributes, editor }: any) {
           ref={imgRef}
           src={src}
           alt={alt || ''}
+          title={title || undefined}
           width={width || undefined}
           height={height || undefined}
           onDoubleClick={handleDoubleClick}

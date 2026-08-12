@@ -51,6 +51,10 @@ export function setWorkspaceFolder(p: string): void {
   workspaceFolder = p
 }
 
+export function getWorkspaceFolder(): string | null {
+  return workspaceFolder
+}
+
 export function assertFileAllowed(p: string): void {
   if (!isPathAllowed(p)) throw new Error('Acceso denegado: la ruta no está autorizada')
 }

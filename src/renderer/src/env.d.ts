@@ -13,6 +13,7 @@ interface FileAPI {
   openFolder: () => Promise<string | null>
   listFiles: (folderPath: string) => Promise<{ name: string; path: string }[]>
   readFile: (filePath: string) => Promise<string>
+  readImage: (filePath: string) => Promise<string | null>
   writeFile: (filePath: string, content: string) => Promise<SaveResult>
   onUpdateStatus: (callback: (status: string, payload?: any) => void) => void
   startDownloadUpdate: () => Promise<void>

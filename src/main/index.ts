@@ -1,9 +1,9 @@
 import { app, BrowserWindow, ipcMain, dialog, Menu, session } from 'electron'
-import { join, basename, extname } from 'path'
+import { join, basename, extname, isAbsolute, resolve } from 'path'
 import { readFile, writeFile, readdir, mkdir, rename, copyFile, unlink } from 'fs/promises'
 import { constants as fsConstants } from 'fs'
 import { autoUpdater } from 'electron-updater'
-import { authorizePath, assertFileAllowed, isMarkdownPath, isMoveAllowed, isSafeName, isValidPathInput, setWorkspaceFolder } from './paths'
+import { authorizePath, assertFileAllowed, getWorkspaceFolder, isMarkdownPath, isMoveAllowed, isSafeName, isValidPathInput, setWorkspaceFolder } from './paths'
 
 let mainWindow: BrowserWindow | null = null
 let startupFilePath: string | null = null
@@ -224,6 +224,31 @@ ipcMain.handle('file:read', async (_event, filePath: string) => {
   // acota la superficie de escalada lectura → borrado a archivos del dominio.
   if (isMarkdownPath(filePath)) authorizePath(filePath)
   return content
+})
+
+// Lee una imagen local y la devuelve como data URL para poder incrustarla en
+// el editor. Resuelve rutas relativas contra el workspace abierto y rutas
+// absolutas de Windows (C:/...) o file://. Devuelve null si no es imagen o
+// no existe — el renderer muestra la imagen rota como en cualquier editor.
+ipcMain.handle('file:readImage', async (_event, filePath: unknown) => {
+  if (typeof filePath !== 'string' || !filePath.trim()) return null
+  // Normaliza file:///C:/... y file://C:/... a C:/... (rutas absolutas Windows)
+  let p = filePath.trim().replace(/^file:\/\/\/?/, '')
+  if (!isAbsolute(p)) {
+    const wf = getWorkspaceFolder()
+    if (!wf) return null
+    p = resolve(wf, p)
+  }
+  if (!/^[^\x00]+$/.test(p)) return null
+  const ext = extname(p).toLowerCase()
+  if (!['.png', '.jpg', '.jpeg', '.gif', '.webp', '.bmp', '.svg'].includes(ext)) return null
+  try {
+    const data = await readFile(p)
+    const mime = ext === '.svg' ? 'image/svg+xml' : `image/${ext.slice(1)}`
+    return `data:${mime};base64,${data.toString('base64')}`
+  } catch {
+    return null
+  }
 })
 
 ipcMain.handle('file:write', async (_event, filePath: string, content: string) => {

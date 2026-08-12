@@ -346,6 +346,7 @@ La aplicación sigue un diseño de **3 columnas**:
 | `dialog:openFolder` | Abre diálogo para seleccionar carpeta |
 | `folder:listFiles` | Lista archivos .md recursivamente en una carpeta |
 | `file:read` | Lee contenido de un archivo |
+| `file:readImage` | Lee una imagen local (ruta absoluta, `file://` o relativa al workspace) y la devuelve como data URL base64 para incrustarla en el editor; `null` si no es imagen o no existe |
 | `file:write` | Escribe contenido en un archivo. Devuelve `{ ok, error? }` (los fallos se informan, no se lanzan) |
 | `file:createFolder` | Crea una carpeta |
 | `file:rename` | Renombra un archivo/carpeta |
@@ -466,6 +467,7 @@ El script `scripts/release.ps1` automatiza los pasos 4-5. Requiere `gh` CLI aute
 
 | Versión | Fecha | Cambios |
 |---|---|---|
+| v0.1.6 (fix imágenes) | 2026-08-12 | **Fix inserción de imágenes por sintaxis Markdown** `![alt](ruta)` (bug: quedaba como texto): input rule en ResizableImage, detección en pegado (`handlePaste` inserta el nodo directo, saltando markdown-it/DOMPurify que eliminan rutas locales), nuevo IPC `file:readImage` que resuelve rutas locales/`file://`/relativas a data URL en el editor, atributo `title` en el nodo |
 | v0.1.6 | 2026-08 | Fix bug copiar/pegar, cambios en la barra inicial, Tab en tabla crea fila nueva si es la última celda, Shift+Tab sale de la tabla |
 | v0.1.6 (fixes auditoría) | 2026-08-12 | **Fase 1** (altos): posiciones reales en Búsqueda/Reemplazo (`doc.descendants`), `file:duplicate` sin bucle infinito (límite 100 + `COPYFILE_EXCL`), validación de rutas en IPC de archivos (`authorizedPaths` + workspace, canal `paths:seed`) · **Fase 2** (medios): CSP en producción + DOMPurify en `mdToHtml`, errores de guardado (`performSave`, IPC devuelve `{ok,error}`), debounce de `htmlToMd` en `onUpdate`, F11 = Modo Enfoque en UI, atajos inexistentes removidos de la paleta, script `lint` eliminado · **Fase 3** (limpieza): `lang="es"` en index.html, dead code (`pendingSourceContentRef`, `DEFAULT_MD`, `markdownHintSeen/MarkSeen`, re-export `tableSortKey`, param `setShowWelcome`), CSS muerto (`.math-error`), `createTableNode` sin export, devDeps `@types/katex` (katex trae sus tipos) y `png-to-ico` (doc: "no usar") eliminadas · **Fase 4** (DRY): `utils/video.ts` (regex de YouTube único, antes duplicado en VideoBlock y SlashCommand), `utils/fileUtils.ts` (FileReader/selector de imagen compartidos en SlashCommand, CommandPalette y drag&drop), factoría `withCellAlign()` (unifica TableCell/TableHeader), módulo `src/main/paths.ts` (validación de rutas extraída de `index.ts`) |
 | v0.1.5 | 2026-07 | **Refactor App.tsx → 3 hooks** (useTabs, useEditorState, useKeyboardShortcuts), importar CSV/TSV como tablas Markdown, convertir datos a tabla + pegado Excel/Sheets, alineación visual de columnas, mejoramiento de tablas, fix KaTeX, pegado ChatGPT, tab bar UX + contraste |
@@ -591,6 +593,7 @@ Solo si ambos pasan sin errores se considera terminado.
 - `utils/video.ts` centraliza el regex de YouTube (antes duplicado en VideoBlock y SlashCommand); `utils/fileUtils.ts` centraliza la lectura FileReader de imágenes/CSV (SlashCommand, paleta y drag & drop) (2026-08-12)
 - `extensions/index.ts` usa la factoría `withCellAlign()` para el atributo `align` de celdas y encabezados de tabla (2026-08-12)
 - `src/main/paths.ts` concentra la validación de rutas autorizadas y del workspace (defensa en profundidad, 2026-08-12)
+- El IPC `file:readImage` (2026-08-12) lee imágenes locales y las devuelve como data URL para incrustarlas en el editor; `ImageComponent` resuelve automáticamente srcs locales (`C:/...`, `file:///...`, `./...`) y el input rule + `handlePaste` convierten `![alt](src "title")` en nodo imagen
 - Las extensiones personalizadas (CodeBlock, ResizableImage, MathInline, MathBlock, MermaidBlock) usan `ReactNodeViewRenderer` para renderizado React
 - El arrastre de pestañas usa HTML5 Drag & Drop API con indicadores `::before`/`::after` vía CSS
 - El menú contextual de tablas detecta clics en nodos `table` mediante `view.posAtCoords` + `doc.nodesBetween`

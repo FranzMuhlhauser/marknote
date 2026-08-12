@@ -42,7 +42,7 @@ function expandToWord(doc: any, pos: number): { from: number; to: number } | nul
 }
 
 function looksLikeMarkdown(text: string): boolean {
-  return /(?:^|\n)\s*(?:#{1,6}\s|[-*]\s|>\s|\[\s?\]|\d+\.\s+\S|\|.+\||\$\$)/m.test(text)
+  return /(?:^|\n)\s*(?:#{1,6}\s|[-*]\s|>\s|\[\s?\]|!\[[^\]]*\]\(|\d+\.\s+\S|\|.+\||\$\$)/m.test(text)
 }
 
 function App() {
@@ -145,11 +145,25 @@ function App() {
       },
       handlePaste: (view, event) => {
         const text = event.clipboardData?.getData('text/plain') ?? ''
-        
+
         // If pasting inside a code block or inline code, let default behavior handle it literally
         if (editor?.isActive('codeBlock') || editor?.isActive('code')) {
           return false
         }
+
+        // Imágenes Markdown: se insertan como nodos image directamente, saltando
+        // markdown-it/DOMPurify, que eliminan rutas locales C:/ y file:// (las
+        // tratan como esquema no permitido). ImageComponent las resuelve a data URL.
+        const imgRe = /!\[([^\]]*)\]\(([^)\s]+)(?:\s+"([^"]*)")?\)/g
+        let imgMatch: RegExpExecArray | null
+        let handledImage = false
+        while ((imgMatch = imgRe.exec(text))) {
+          handledImage = true
+          const attrs: Record<string, string> = { src: imgMatch[2], alt: imgMatch[1] }
+          if (imgMatch[3]) attrs.title = imgMatch[3]
+          editor?.chain().focus().insertContent({ type: 'image', attrs }).run()
+        }
+        if (handledImage) return true
 
         if (looksLikeMarkdown(text)) {
           const converted = mdToHtml(text)

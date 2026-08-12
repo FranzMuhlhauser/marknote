@@ -7,6 +7,7 @@ const api = {
   openFolder: () => ipcRenderer.invoke('dialog:openFolder'),
   listFiles: (folderPath: string) => ipcRenderer.invoke('folder:listFiles', folderPath),
   readFile: (filePath: string) => ipcRenderer.invoke('file:read', filePath),
+  readImage: (filePath: string) => ipcRenderer.invoke('file:readImage', filePath),
   writeFile: (filePath: string, content: string) => ipcRenderer.invoke('file:write', filePath, content),
   onUpdateStatus: (callback: (status: string, payload?: any) => void) => {
     ipcRenderer.on('update:status', (_event, status, payload) => callback(status, payload))
