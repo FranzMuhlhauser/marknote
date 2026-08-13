@@ -13,7 +13,7 @@ const CELL = 18
 const GAP = 2
 const PAD = 8
 const W = MAX_GRID * (CELL + GAP) - GAP + PAD * 2
-const H = MAX_GRID * (CELL + GAP) - GAP + PAD * 2 + 50
+const H = MAX_GRID * (CELL + GAP) - GAP + PAD * 2 + 62
 
 export function TableSizePicker({ position, defaultSize, onSelect, onClose }: TableSizePickerProps) {
   const [hoveredRows, setHoveredRows] = useState(defaultSize?.rows ?? 1)

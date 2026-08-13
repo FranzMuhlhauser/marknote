@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useRef } from 'react'
 import { useEditor, EditorContent } from '@tiptap/react'
+import type { Editor } from '@tiptap/core'
+import type { NodeSelection } from '@tiptap/pm/state'
 import { getExtensions } from './extensions'
 import { Toolbar } from './components/Toolbar'
 import { MenuBar } from './components/MenuBar'
@@ -46,6 +48,24 @@ function looksLikeMarkdown(text: string): boolean {
   return /(?:^|\n)\s*(?:#{1,6}\s|[-*]\s|>\s|\[\s?\]|!\[[^\]]*\]\(|\d+\.\s+\S|\|.+\||\$\$)/m.test(text)
 }
 
+// Localiza el elemento DOM de la tabla que contiene la selección actual.
+// Cubre TextSelection dentro de una celda y NodeSelection sobre la tabla.
+function findActiveTableDom(editor: Editor): HTMLElement | null {
+  if (!editor.isActive('table')) return null
+  const { selection } = editor.state
+  const { $anchor } = selection
+  for (let d = $anchor.depth; d >= 0; d--) {
+    if ($anchor.node(d).type.name === 'table') {
+      return editor.view.nodeDOM($anchor.before(d)) as HTMLElement | null
+    }
+  }
+  const node = (selection as NodeSelection).node
+  if (node && node.type.name === 'table') {
+    return editor.view.nodeDOM(selection.from) as HTMLElement | null
+  }
+  return null
+}
+
 function App() {
   const ui = useEditorState()
 
@@ -62,6 +82,8 @@ function App() {
   // Refs to avoid stale closures in useEditor callbacks
   const activeTabIdRef = useRef<string | null>(null)
   const htmlToMdDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const editorContainerRef = useRef<HTMLElement>(null)
+  const tableDomRef = useRef<HTMLElement | null>(null)
 
   const editor = useEditor({
     extensions: getExtensions(),
@@ -222,19 +244,39 @@ function App() {
   useEffect(() => {
     if (!editor) return
     const handleSelection = () => {
-      if (editor.isActive('table')) {
-        const tableEl = editor.view.dom.querySelector('table')
-        if (tableEl) {
-          const rect = tableEl.getBoundingClientRect()
-          ui.setTableBtnPos({ x: rect.left + rect.width / 2, y: rect.top - 12 })
-        }
-      } else {
+      const tableEl = findActiveTableDom(editor)
+      if (!tableEl) {
+        tableDomRef.current = null
         ui.setTableBtnPos(null)
+        return
       }
+      tableDomRef.current = tableEl
+      const rect = tableEl.getBoundingClientRect()
+      ui.setTableBtnPos({ x: rect.left + rect.width / 2, y: rect.top - 12 })
     }
+    handleSelection()
     editor.on('selectionUpdate', handleSelection)
     return () => { editor.off('selectionUpdate', handleSelection) }
   }, [editor])
+
+  // El botón flotante usa coordenadas de viewport; se reposiciona al hacer
+  // scroll en el contenedor del editor o redimensionar la ventana.
+  useEffect(() => {
+    const container = editorContainerRef.current
+    if (!container) return
+    const reposition = () => {
+      const tableEl = tableDomRef.current
+      if (!tableEl || !tableEl.isConnected) return
+      const rect = tableEl.getBoundingClientRect()
+      ui.setTableBtnPos({ x: rect.left + rect.width / 2, y: rect.top - 12 })
+    }
+    container.addEventListener('scroll', reposition, { passive: true })
+    window.addEventListener('resize', reposition)
+    return () => {
+      container.removeEventListener('scroll', reposition)
+      window.removeEventListener('resize', reposition)
+    }
+  }, [])
 
   // Startup file handling (uses ref to always have latest callback)
   const openFileFromExplorerRef = useRef(tabs.openFileFromExplorer)
@@ -437,7 +479,7 @@ function App() {
         </aside>
         )}
 
-        <main className="editor-container">
+        <main className="editor-container" ref={editorContainerRef}>
           {ui.showWelcome && tabs.tabs.length === 0 ? (
             <WelcomeScreen
               onNew={tabs.newDoc}
@@ -470,12 +512,19 @@ function App() {
           )}
           {ui.tableBtnPos && !ui.tableMenuPos && (
             <div
-              className="table-menu-btn"
-              style={{ left: ui.tableBtnPos?.x ?? 0, top: ui.tableBtnPos?.y ?? 0 }}
-              onClick={() => ui.setTableMenuPos({ x: (ui.tableBtnPos?.x ?? 0) - 12, y: (ui.tableBtnPos?.y ?? 0) + 28 })}
-              title="Operaciones de tabla"
+              className="table-float-bar"
+              style={{ left: ui.tableBtnPos.x, top: ui.tableBtnPos.y }}
             >
-              ⊞
+              <div
+                className="table-menu-btn"
+                onClick={() => ui.setTableMenuPos({ x: (ui.tableBtnPos?.x ?? 0) - 12, y: (ui.tableBtnPos?.y ?? 0) + 28 })}
+                title="Operaciones de tabla"
+              >
+                ⊞
+              </div>
+              <div className="table-exit-hint">
+                <kbd>Shift+Tab</kbd> sale de la tabla
+              </div>
             </div>
           )}
           {ui.tablePickerPos && (
