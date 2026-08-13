@@ -1,6 +1,18 @@
 import { Node, mergeAttributes } from '@tiptap/core'
 import { NodeViewWrapper, ReactNodeViewRenderer } from '@tiptap/react'
 import { useEffect, useRef, useState } from 'react'
+import { ensureParagraphsAroundInsertedNode, atomBlockKeyboardShortcuts } from './blockNeighbors'
+
+// Declara el comando setMermaid en la interface Commands (mismo patrón que
+// setImage/setVideo) para que editor.chain().focus().setMermaid(...) compile
+// y exista en runtime.
+declare module '@tiptap/core' {
+  interface Commands<ReturnType> {
+    mermaidBlock: {
+      setMermaid: (options: { code: string }) => ReturnType
+    }
+  }
+}
 
 export const MermaidBlock = Node.create({
   name: 'mermaidBlock',
@@ -22,6 +34,23 @@ export const MermaidBlock = Node.create({
 
   addNodeView() {
     return ReactNodeViewRenderer(MermaidComponent)
+  },
+
+  // Registra el comando setMermaid y garantiza párrafos alrededor del bloque
+  // para poder escribir arriba/abajo (ver ensureParagraphsAroundInsertedNode).
+  addCommands() {
+    return {
+      setMermaid: (options: { code: string }) => ({ commands, tr }) => {
+        const ok = commands.insertContent({ type: this.name, attrs: { code: options.code } })
+        if (!ok) return false
+        ensureParagraphsAroundInsertedNode(tr, this.name)
+        return true
+      },
+    }
+  },
+
+  addKeyboardShortcuts() {
+    return atomBlockKeyboardShortcuts(this.name)
   }
 })
 

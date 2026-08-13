@@ -23,6 +23,7 @@ import { readFileAsDataURL, readFileAsText } from './utils/fileUtils'
 import { addCustomWord } from './utils/customDictionary'
 import { exportHtml, exportPdf } from './utils/export'
 import { useEditorState } from './hooks/useEditorState'
+import { ensureMediaNeighbors } from './extensions/blockNeighbors'
 import { useTabs } from './hooks/useTabs'
 import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts'
 import 'katex/dist/katex.min.css'
@@ -120,9 +121,9 @@ function App() {
           if (file.type.startsWith('image/')) {
             event.preventDefault()
             readFileAsDataURL(file).then(src => {
-              view.dispatch(view.state.tr.replaceSelectionWith(
-                view.state.schema.nodes.image.create({ src })
-              ))
+              // setImage incluye la garantía de párrafos alrededor (ver
+              // ensureNeighborParagraphs) para poder escribir arriba/abajo.
+              editor?.chain().focus().setImage({ src }).run()
             }, () => {})
             return true
           }
@@ -159,9 +160,10 @@ function App() {
         let handledImage = false
         while ((imgMatch = imgRe.exec(text))) {
           handledImage = true
-          const attrs: Record<string, string> = { src: imgMatch[2], alt: imgMatch[1] }
+          const attrs: { src: string; alt?: string; title?: string } = { src: imgMatch[2], alt: imgMatch[1] }
           if (imgMatch[3]) attrs.title = imgMatch[3]
-          editor?.chain().focus().insertContent({ type: 'image', attrs }).run()
+          // setImage incluye la garantía de párrafos alrededor de la imagen
+          editor?.chain().focus().setImage(attrs).run()
         }
         if (handledImage) return true
 
@@ -306,6 +308,9 @@ function App() {
       const prevActiveId = activeTabIdRef.current
       activeTabIdRef.current = null
       editor.commands.setContent(html)
+      const tr = editor.state.tr
+      ensureMediaNeighbors(tr)
+      if (tr.docChanged) editor.view.dispatch(tr)
       activeTabIdRef.current = prevActiveId
 
       // Save the original markdown (not the round-tripped version from onUpdate)

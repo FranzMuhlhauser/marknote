@@ -4,10 +4,12 @@ const api = {
   openFile: () => ipcRenderer.invoke('dialog:open'),
   openCsvFile: () => ipcRenderer.invoke('dialog:openCsv'),
   saveFile: (filePath?: string, content?: string) => ipcRenderer.invoke('dialog:save', { filePath, content }),
+  askSavePath: () => ipcRenderer.invoke('dialog:savePath'),
   openFolder: () => ipcRenderer.invoke('dialog:openFolder'),
   listFiles: (folderPath: string) => ipcRenderer.invoke('folder:listFiles', folderPath),
   readFile: (filePath: string) => ipcRenderer.invoke('file:read', filePath),
-  readImage: (filePath: string) => ipcRenderer.invoke('file:readImage', filePath),
+  readMedia: (filePath: string, baseDir?: string) => ipcRenderer.invoke('file:readMedia', filePath, baseDir),
+  saveAsset: (args: { mdPath: string; fileName: string; dataBase64: string }) => ipcRenderer.invoke('file:saveAsset', args),
   writeFile: (filePath: string, content: string) => ipcRenderer.invoke('file:write', filePath, content),
   onUpdateStatus: (callback: (status: string, payload?: any) => void) => {
     ipcRenderer.on('update:status', (_event, status, payload) => callback(status, payload))

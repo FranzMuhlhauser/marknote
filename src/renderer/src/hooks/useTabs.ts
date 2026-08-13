@@ -1,7 +1,10 @@
 import { useState, useCallback, useEffect, useRef } from 'react'
 import { htmlToMd, mdToHtml } from '../utils/markdown'
+import { materializeMedia } from '../utils/mediaAssets'
+import { setCurrentDocDir, dirOfPath } from '../utils/currentDoc'
 import { getTabTitle, type TabInfo } from '../components/TabBar'
 import { showToast } from '../utils/tableParser'
+import { ensureMediaNeighbors } from '../extensions/blockNeighbors'
 
 interface TabDoc {
   id: string
@@ -64,8 +67,16 @@ export function useTabs({
     const ed = editorRef.current
     if (!ed) return
     switchingTab.current = true
+    // Las rutas relativas de medios del .md se resuelven contra su directorio.
+    setCurrentDocDir(tab.filePath ? dirOfPath(tab.filePath) : null)
     const html = mdToHtml(tab.content)
     ed.commands.setContent(html)
+    // Asegura párrafos navegables alrededor de medios que queden pegados a un
+    // borde del documento tras el parseo (imagen/video/mermaid al inicio o
+    // como único contenido).
+    const tr = ed.state.tr
+    ensureMediaNeighbors(tr)
+    if (tr.docChanged) ed.view.dispatch(tr)
     setSourceText(tab.content)
     setShowSource(false)
     setShowWelcome(false)
@@ -114,29 +125,61 @@ export function useTabs({
     return htmlToMd(ed.getHTML())
   }, [showSource, sourceText])
 
+  // Tras materializar los assets, actualiza el src de los nodos del editor
+  // (data:/blob: → ruta relativa) para que el próximo guardado no duplique
+  // archivos en <doc>.assets.
+  const applyMediaReplacements = useCallback((replacements: Map<string, string>) => {
+    const ed = editorRef.current
+    if (!ed || replacements.size === 0) return
+    const { tr } = ed.state
+    let changed = false
+    ed.state.doc.descendants((node: any, pos: number) => {
+      if ((node.type.name === 'image' || node.type.name === 'videoBlock') && replacements.has(node.attrs.src)) {
+        tr.setNodeMarkup(pos, undefined, { ...node.attrs, src: replacements.get(node.attrs.src) })
+        changed = true
+      }
+    })
+    if (changed) ed.view.dispatch(tr)
+  }, [])
+
   // Guarda un tab y solo lo marca como guardado si la escritura tuvo éxito.
   // Devuelve false si el usuario cancela el diálogo o si falla la escritura
   // (el tab permanece modified:true y se informa el error para no perder datos).
-  const performSave = useCallback(async (tab: TabDoc, text: string, isActive: boolean): Promise<boolean> => {
+  // forceDialog=true obliga a abrir el diálogo aunque el tab ya tenga ruta
+  // (comportamiento de "Guardar Como").
+  const performSave = useCallback(async (tab: TabDoc, text: string, isActive: boolean, forceDialog = false): Promise<boolean> => {
     try {
-      const result = await window.api.saveFile(tab.filePath ?? undefined, text)
+      let targetPath = forceDialog ? null : tab.filePath
+      if (!targetPath) {
+        // El diálogo va primero: los assets deben escribirse junto al destino.
+        targetPath = await window.api.askSavePath()
+        if (!targetPath) return false
+      }
+      // Los medios embebidos (data:/blob:) se materializan en <doc>.assets y
+      // se reemplazan por rutas relativas antes de escribir el .md.
+      const { markdown, replacements } = await materializeMedia(text, targetPath)
+      const result = await window.api.saveFile(targetPath, markdown)
       if (!result) return false
       if (!result.ok) {
         showToast(result.error || 'Error al guardar el archivo')
         return false
       }
-      const savedPath = result.path ?? tab.filePath
+      const savedPath = result.path ?? targetPath
+      if (isActive) {
+        setSourceText(markdown)
+        applyMediaReplacements(replacements)
+        setCurrentDocDir(dirOfPath(savedPath))
+      }
       setTabs(prev => prev.map(t =>
-        t.id === tab.id ? { ...t, filePath: savedPath, content: text, modified: false } : t
+        t.id === tab.id ? { ...t, filePath: savedPath, content: markdown, modified: false } : t
       ))
-      if (isActive) setSourceText(text)
       if (savedPath) addRecent(savedPath)
       return true
     } catch {
       showToast('Error al guardar el archivo')
       return false
     }
-  }, [setSourceText])
+  }, [setSourceText, applyMediaReplacements])
 
   const saveDoc = useCallback(async () => {
     if (!activeTab) return
@@ -144,10 +187,11 @@ export function useTabs({
     await performSave(activeTab, text, true)
   }, [activeTab, getMarkdown, performSave])
 
+  // Guardar Como: siempre abre el diálogo para elegir una nueva ruta.
   const saveAsDoc = useCallback(async () => {
     if (!activeTab) return
     const text = getMarkdown()
-    await performSave(activeTab, text, true)
+    await performSave(activeTab, text, true, true)
   }, [activeTab, getMarkdown, performSave])
 
   const saveUnsavedTab = useCallback(async (tab: TabDoc): Promise<boolean> => {

@@ -1,6 +1,8 @@
 import { Node, mergeAttributes, InputRule } from '@tiptap/core'
 import { NodeViewWrapper, ReactNodeViewRenderer } from '@tiptap/react'
 import { useCallback, useRef, useState, useEffect } from 'react'
+import { ensureNeighborParagraphs, ensureParagraphsAroundInsertedNode, atomBlockKeyboardShortcuts } from './blockNeighbors'
+import { getCurrentDocDir } from '../utils/currentDoc'
 
 // Declara el comando setImage en la interface Commands (patrón del core: objeto
 // anidado bajo el nombre del nodo, que es lo que KeysWithTypeOf<Commands, object>
@@ -51,10 +53,17 @@ export const ResizableImage = Node.create({
   // los comandos que cada extensión define explícitamente con addCommands().
   addCommands() {
     return {
-      setImage: (options: { src: string; alt?: string; title?: string }) => ({ commands }) => {
+      setImage: (options: { src: string; alt?: string; title?: string }) => ({ commands, tr }) => {
         const attrs: Record<string, string> = { src: options.src, alt: options.alt || '' }
         if (options.title) attrs.title = options.title
-        return commands.insertContent({ type: this.name, attrs })
+        const ok = commands.insertContent({ type: this.name, attrs })
+        if (!ok) return false
+
+        // La imagen queda al final del contenido insertado. Al ser un nodo
+        // bloque atom, garantiza párrafos alrededor para poder seguir
+        // escribiendo arriba/abajo (ver ensureNeighborParagraphs).
+        ensureParagraphsAroundInsertedNode(tr, this.name)
+        return true
       },
     }
   },
@@ -72,9 +81,19 @@ export const ResizableImage = Node.create({
           if (title) attrs.title = title
           const { tr } = state
           tr.replaceWith(range.from, range.to, this.type.create(attrs))
+          // Si la imagen queda pegada a un borde del doc, garantiza párrafos
+          // alrededor para poder escribir (misma lógica que setImage).
+          const node = tr.doc.nodeAt(range.from)
+          if (node && node.type.name === 'image') {
+            ensureNeighborParagraphs(tr, range.from, range.from + node.nodeSize)
+          }
         },
       }),
     ]
+  },
+
+  addKeyboardShortcuts() {
+    return atomBlockKeyboardShortcuts(this.name)
   }
 })
 
@@ -89,17 +108,18 @@ function ImageComponent({ node, updateAttributes, editor }: any) {
   const { src, alt, title, width, height, align } = node.attrs
 
   // Las rutas locales (C:/..., file://, ./) no cargan como src en el navegador;
-  // se leen vía IPC y se reemplazan por su data URL para que la imagen se vea.
+  // se resuelven vía IPC a un data URL SOLO para mostrarla. El atributo src del
+  // nodo conserva la ruta original: es lo que se escribe en el .md al guardar.
   const isLocalPath = src && !/^(https?:|data:|blob:)/i.test(src)
+  const [resolvedSrc, setResolvedSrc] = useState<string | null>(null)
   useEffect(() => {
-    if (!isLocalPath) return
+    if (!isLocalPath) { setResolvedSrc(null); return }
     let cancelled = false
-    window.api.readImage(src).then(dataUrl => {
-      if (cancelled || !dataUrl) return
-      updateAttributes({ src: dataUrl })
+    window.api.readMedia(src, getCurrentDocDir() ?? undefined).then(dataUrl => {
+      if (!cancelled) setResolvedSrc(dataUrl)
     })
     return () => { cancelled = true }
-  }, [src, isLocalPath, updateAttributes])
+  }, [src, isLocalPath])
 
   const handleAltSave = useCallback(() => {
     updateAttributes({ alt: altText })
@@ -157,7 +177,7 @@ function ImageComponent({ node, updateAttributes, editor }: any) {
       <div className="resizable-image-container">
         <img
           ref={imgRef}
-          src={src}
+          src={resolvedSrc ?? src}
           alt={alt || ''}
           title={title || undefined}
           width={width || undefined}

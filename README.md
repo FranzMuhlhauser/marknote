@@ -1,24 +1,14 @@
-<div align="center">
-  <img src="resources/icon.png" alt="Marknote" width="80" height="80" />
-  <h1 align="center">Marknote</h1>
-  <p align="center">
-    Editor Markdown WYSIWYG nativo para Windows
-    <br />
-    Inspirado en Typora · Construido con Electron + React + TypeScript
-  </p>
-  <p align="center">
-    <a href="#características">Características</a> ·
-    <a href="#instalación">Instalación</a> ·
-    <a href="#desarrollo">Desarrollo</a> ·
-    <a href="#build-y-empaquetado">Build</a> ·
-    <a href="#atajos-de-teclado">Atajos</a>
-  </p>
-</div>
+# Marknote
+
+Editor Markdown WYSIWYG nativo para Windows  
+Inspirado en Typora · Construido con Electron + React + TypeScript
+
+[Características](#características) · [Instalación](#instalación) · [Desarrollo](#desarrollo) · [Build](#build-y-empaquetado) · [Atajos](#atajos-de-teclado)
 
 > **Principio Rector de Marknote**  
 > Marknote es un editor Markdown que combina la comodidad de una interfaz gráfica con el aprendizaje progresivo. Los botones están ahí para ayudarte hoy, pero el objetivo es que mañana domines Markdown y los necesites cada vez menos.
 
----
+* * *
 
 ## Captura
 
@@ -47,64 +37,114 @@
 ## Características
 
 ### Editor Profesional
-- **Edición WYSIWYG** con TipTap/ProseMirror — escribe Markdown, ves el resultado en tiempo real
-- **Ancho máximo 960px** centrado, márgenes amplios, tipografía cómoda para largas sesiones
-- **Resaltado de línea actual**, scroll suave, cursor visible
-- **Vista fuente** para editar Markdown directamente
-- **Arrastrar y soltar imágenes** desde el explorador de archivos
+
+*   **Edición WYSIWYG** con TipTap/ProseMirror — escribe Markdown, ves el resultado en tiempo real
+    
+*   **Ancho máximo 960px** centrado, márgenes amplios, tipografía cómoda para largas sesiones
+    
+*   **Resaltado de línea actual**, scroll suave, cursor visible
+    
+*   **Vista fuente** para editar Markdown directamente
+    
+*   **Arrastrar y soltar imágenes** desde el explorador de archivos
+    
 
 ### Formato Rico
-- Negrita, cursiva, subrayado, tachado, resaltado, código inline
-- Encabezados H1–H6, listas ordenadas/desordenadas/de tareas
-- Citas, bloques de código, líneas horizontales
-- Tablas con menú contextual (insertar/eliminar filas y columnas, combinar/dividir celdas)
-- Alineación de texto
+
+*   Negrita, cursiva, subrayado, tachado, resaltado, código inline
+    
+*   Encabezados H1–H6, listas ordenadas/desordenadas/de tareas
+    
+*   Citas, bloques de código, líneas horizontales
+    
+*   Tablas con menú contextual (insertar/eliminar filas y columnas, combinar/dividir celdas)
+    
+*   Alineación de texto
+    
 
 ### Bloques de Código
-- **Resaltado de sintaxis** con lowlight (todos los lenguajes comunes)
-- **Botón Copy** con feedback visual
-- **Collapse/Expand** para colapsar bloques largos
-- **Selector de lenguaje** inline — haz clic en el lenguaje para cambiarlo
+
+*   **Resaltado de sintaxis** con lowlight (todos los lenguajes comunes)
+    
+*   **Botón Copy** con feedback visual
+    
+*   **Collapse/Expand** para colapsar bloques largos
+    
+*   **Selector de lenguaje** inline — haz clic en el lenguaje para cambiarlo
+    
 
 ### Imágenes
-- **Redimensionar** con 3 handles de arrastre (esquina, ancho, alto)
-- **Alinear** izquierda/centro/derecha con toolbar flotante
-- **Texto alternativo** (alt) — doble clic en la imagen
-- **Dimensiones numéricas** precisas
+
+*   **Redimensionar** con 3 handles de arrastre (esquina, ancho, alto)
+    
+*   **Alinear** izquierda/centro/derecha con toolbar flotante
+    
+*   **Texto alternativo** (alt) — doble clic en la imagen
+    
+*   **Dimensiones numéricas** precisas
+    
+*   **Persistencia al guardar** — las imágenes, videos y diagramas Mermaid se conservan en el `.md` (sintaxis `![alt](ruta)` / ```` ```video ```` / ```` ```mermaid ````) y los medios embebidos se escriben en una carpeta `<doc>.assets` junto al archivo
+    
 
 ### Matemáticas (KaTeX)
-- `$E = mc^2$` para fórmulas inline
-- `$$\sum_{n=1}^{\infty} \frac{1}{n^2}$$` para bloques
-- Renderizado en tiempo real
+
+*   `$E = mc^2$` para fórmulas inline
+    
+*   `$$\sum_{n=1}^{\infty} \frac{1}{n^2}$$` para bloques
+    
+*   Renderizado en tiempo real
+    
 
 ### Diagramas (Mermaid)
-- Flowcharts, diagramas de secuencia, clases, Gantt, y más
-- Editor con vista previa SVG en vivo
+
+*   Flowcharts, diagramas de secuencia, clases, Gantt, y más
+    
+*   Editor con vista previa SVG en vivo
+    
 
 ### Gestión de Archivos
-- **Pestañas** con soporte para múltiples documentos
-- **Reordenar pestañas** por arrastre
-- **Menú contextual en pestañas**: cerrar, cerrar otros, cerrar a la derecha, cerrar todos, cerrar guardados
-- **Explorador lateral** con Favoritos ★, Recientes 🕐, Proyecto 📂, Papelera 🗑
-- **Operaciones avanzadas**: crear archivo/carpeta, renombrar, duplicar, eliminar, arrastrar y soltar
-- **Guardado manual** (Ctrl+S) con confirmación al salir si hay cambios sin guardar
-- **Importar CSV/TSV** como tabla Markdown (menú Archivo o drag & drop)
+
+*   **Pestañas** con soporte para múltiples documentos
+    
+*   **Reordenar pestañas** por arrastre
+    
+*   **Menú contextual en pestañas**: cerrar, cerrar otros, cerrar a la derecha, cerrar todos, cerrar guardados
+    
+*   **Explorador lateral** con Favoritos ★, Recientes 🕐, Proyecto 📂, Papelera 🗑
+    
+*   **Operaciones avanzadas**: crear archivo/carpeta, renombrar, duplicar, eliminar, arrastrar y soltar
+    
+*   **Guardado manual** (Ctrl+S) con confirmación al salir si hay cambios sin guardar
+    
+*   **Importar CSV/TSV** como tabla Markdown (menú Archivo o drag & drop)
+    
 
 ### Temas
-- **6 temas predefinidos**: Claro, Oscuro, Nord, Dracula, Solarized, GitHub
-- **Tema personalizado**: editor visual con selectores de color
+
+*   **2 temas predefinidos**: Claro y Oscuro
+    
 
 ### Modo Enfoque
-- Atenúa todo el chrome de la aplicación
-- Los elementos reaparecen al pasar el cursor
+
+*   Atenúa todo el chrome de la aplicación
+    
+*   Los elementos reaparecen al pasar el cursor
+    
 
 ### Más
-- **Paleta de comandos** (Ctrl+Shift+P) con 20+ comandos
-- **Búsqueda y reemplazo** (Ctrl+F)
-- **Exportar a HTML y PDF**
-- **Pantalla completa** (F11)
-- **Actualizaciones automáticas** vía GitHub Releases
-- **Interfaz completa en español**
+
+*   **Paleta de comandos** (Ctrl+Shift+P) con 20+ comandos
+    
+*   **Búsqueda y reemplazo** (Ctrl+F)
+    
+*   **Exportar a HTML y PDF**
+    
+*   **Pantalla completa** (F11)
+    
+*   **Actualizaciones automáticas** vía GitHub Releases
+    
+*   **Interfaz completa en español**
+    
 
 ## Stack Tecnológico
 
@@ -122,10 +162,14 @@
 ## Instalación
 
 ### Requisitos
-- Node.js v24.16.0+
-- npm 11.13.0+
+
+*   Node.js v24.16.0+
+    
+*   npm 11.13.0+
+    
 
 ### Desde el instalador (Windows)
+
 Descarga el `.exe` desde [Releases](https://github.com/FranzMuhlhauser/marknote/releases) y ejecuta el instalador.
 
 ### Desde el código fuente
@@ -179,6 +223,8 @@ El comando `package:win` genera un instalador NSIS en `dist-electron/`.
 | `F9` | Explorador de archivos |
 | `F11` | Modo Enfoque |
 | `Escape` | Cerrar diálogos |
+| `Tab` (en tabla) | Siguiente celda; en la última añade fila |
+| `Shift+Tab` (en tabla) | Salir de la tabla |
 
 ## Roadmap
 
@@ -198,8 +244,8 @@ El comando `package:win` genera un instalador NSIS en `dist-electron/`.
 - [ ] Plugins: sistema de extensiones
 - [ ] Temas comunitarios
 
----
+> **Windows**: al abrir el instalador, SmartScreen muestra "Windows protegió tu PC" con un botón azul "Más información" → "Ejecutar de todas formas". Es un clic extra, no bloquea la instalación.
 
-<div align="center">
-  <sub>Hecho con ❤️ por Franz Muhlhauser · MIT License</sub>
-</div>
+* * *
+
+Hecho con ❤️ por Franz Muhlhauser · MIT License

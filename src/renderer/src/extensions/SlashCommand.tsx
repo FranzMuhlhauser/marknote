@@ -20,11 +20,11 @@ const items: CommandItem[] = [
     openTablePicker(e, { x: coords.left, y: coords.bottom + 4 })
   } },
   { label: 'Imagen', icon: '🖼', description: 'Insertar imagen', command: async (e: any) => { const src = await pickImageAsDataURL(); if (!src) return; e.chain().focus().setImage({ src }).run() } },
-  { label: 'Video', icon: '🎬', description: 'Insertar video o YouTube', command: async (e: any) => { const u = await showPrompt('URL del video (YouTube o directa):'); if (!u) return; const { type, src } = parseVideoUrl(u); e.chain().focus().insertContent({ type: 'videoBlock', attrs: { type, src } }).run() } },
+  { label: 'Video', icon: '🎬', description: 'Insertar video o YouTube', command: async (e: any) => { const u = await showPrompt('URL del video (YouTube o directa):'); if (!u) return; const { type, src } = parseVideoUrl(u); e.chain().focus().setVideo({ type, src }).run() } },
   { label: 'Enlace', icon: '🔗', description: 'Insertar enlace', command: async (e: any) => { const u = await showPrompt('URL:'); if (u) e.chain().focus().setLink({ href: u }).run() } },
   { label: 'Código', icon: '{}', description: 'Insertar bloque de código', command: (e: any) => e.chain().focus().toggleCodeBlock().run() },
-  { label: 'Mermaid', icon: '📊', description: 'Insertar diagrama Mermaid', command: (e: any) => e.chain().focus().insertContent({ type: 'mermaidBlock', attrs: { code: '' } }).run() },
-  { label: 'Fórmula', icon: '∑', description: 'Insertar fórmula matemática', command: (e: any) => e.chain().focus().insertContent({ type: 'mathBlock', attrs: { tex: '' } }).run() },
+  { label: 'Mermaid', icon: '📊', description: 'Insertar diagrama Mermaid', command: (e: any) => e.chain().focus().setMermaid({ code: '' }).run() },
+  { label: 'Fórmula', icon: '∑', description: 'Insertar fórmula matemática', command: (e: any) => e.chain().focus().setMath({ tex: '' }).run() },
   { label: 'Cita', icon: '❝', description: 'Insertar cita en bloque', command: (e: any) => e.chain().focus().toggleBlockquote().run() }
 ]
 

@@ -2,6 +2,19 @@ import { Node, mergeAttributes } from '@tiptap/core'
 import { NodeViewWrapper, ReactNodeViewRenderer } from '@tiptap/react'
 import { useCallback, useRef, useState, useEffect } from 'react'
 import { parseVideoUrl } from '../utils/video'
+import { getCurrentDocDir } from '../utils/currentDoc'
+import { ensureParagraphsAroundInsertedNode, atomBlockKeyboardShortcuts } from './blockNeighbors'
+
+// Declara el comando setVideo en la interface Commands (mismo patrón que
+// setImage en ResizableImage) para que editor.chain().focus().setVideo(...)
+// compile y exista en runtime.
+declare module '@tiptap/core' {
+  interface Commands<ReturnType> {
+    videoBlock: {
+      setVideo: (options: { src: string; type?: string }) => ReturnType
+    }
+  }
+}
 
 export const VideoBlock = Node.create({
   name: 'videoBlock',
@@ -30,6 +43,24 @@ export const VideoBlock = Node.create({
 
   addNodeView() {
     return ReactNodeViewRenderer(VideoComponent)
+  },
+
+  // Registra el comando setVideo (como setImage en ResizableImage) y garantiza
+  // párrafos alrededor del video para poder escribir arriba/abajo.
+  addCommands() {
+    return {
+      setVideo: (options: { src: string; type?: string }) => ({ commands, tr }) => {
+        const attrs: Record<string, string> = { src: options.src, type: options.type || 'url' }
+        const ok = commands.insertContent({ type: this.name, attrs })
+        if (!ok) return false
+        ensureParagraphsAroundInsertedNode(tr, this.name)
+        return true
+      },
+    }
+  },
+
+  addKeyboardShortcuts() {
+    return atomBlockKeyboardShortcuts(this.name)
   }
 })
 
@@ -42,6 +73,19 @@ function VideoComponent({ node, updateAttributes, editor }: any) {
   const [resizing, setResizing] = useState<'se' | 'e' | 's' | null>(null)
 
   const { src, type, width, height, align } = node.attrs
+
+  // Igual que en las imágenes: las rutas locales se resuelven a data URL solo
+  // para reproducir; el atributo src conserva la ruta que se guarda en el .md.
+  const isLocalPath = !!src && type !== 'youtube' && !/^(https?:|data:|blob:)/i.test(src)
+  const [resolvedSrc, setResolvedSrc] = useState<string | null>(null)
+  useEffect(() => {
+    if (!isLocalPath) { setResolvedSrc(null); return }
+    let cancelled = false
+    window.api.readMedia(src, getCurrentDocDir() ?? undefined).then(dataUrl => {
+      if (!cancelled) setResolvedSrc(dataUrl)
+    })
+    return () => { cancelled = true }
+  }, [src, isLocalPath])
 
   const setAlignment = useCallback((a: string) => {
     updateAttributes({ align: a })
@@ -134,7 +178,7 @@ function VideoComponent({ node, updateAttributes, editor }: any) {
         ) : (
           <video
             ref={videoRef as any}
-            src={src}
+            src={resolvedSrc ?? src}
             width={width || undefined}
             height={height || undefined}
             className="video-block-player"

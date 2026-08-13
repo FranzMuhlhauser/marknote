@@ -117,7 +117,7 @@ export const TOPICS: KnowledgeTopic[] = [
       input: '| Producto | Precio | Stock |\n|----------|:-----:|------:|\n| Manzana  | $1.20 |   150 |\n| Pera     | $1.50 |    80 |',
       rendered: 'Una tabla de 3 columnas con precio centrado y stock alineado a la derecha.'
     },
-    tips: ['Alinea las tuberías visualmente en el código fuente para mejor legibilidad', 'Evita tablas muy anchas — se ven mal en pantallas pequeñas'],
+    tips: ['Alinea las tuberías visualmente en el código fuente para mejor legibilidad', 'Evita tablas muy anchas — se ven mal en pantallas pequeñas', 'Shift+Tab (en la primera celda) sale de la tabla'],
     related: ['code-blocks']
   },
   {

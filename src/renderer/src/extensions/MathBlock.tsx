@@ -1,6 +1,18 @@
 import { Node, mergeAttributes, PasteRule } from '@tiptap/core'
 import { NodeViewWrapper, ReactNodeViewRenderer } from '@tiptap/react'
 import { useRef, useState, useEffect } from 'react'
+import { ensureNeighborParagraphs, ensureParagraphsAroundInsertedNode, atomBlockKeyboardShortcuts } from './blockNeighbors'
+
+// Declara el comando setMath en la interface Commands (mismo patrón que
+// setImage/setVideo) para que editor.chain().focus().setMath(...) compile
+// y exista en runtime.
+declare module '@tiptap/core' {
+  interface Commands<ReturnType> {
+    mathBlock: {
+      setMath: (options: { tex: string }) => ReturnType
+    }
+  }
+}
 
 export const MathBlock = Node.create({
   name: 'mathBlock',
@@ -33,10 +45,34 @@ export const MathBlock = Node.create({
         handler: ({ state, range, match }) => {
           const tex = (match[1] || '').trim()
           const nodeType = state.schema.nodes.mathBlock
-          state.tr.replaceRangeWith(range.from, range.to, nodeType.create({ tex }))
+          const { tr } = state
+          tr.replaceRangeWith(range.from, range.to, nodeType.create({ tex }))
+          // Si el bloque queda pegado a un borde del doc, garantiza párrafos
+          // alrededor para poder escribir (misma lógica que setMath).
+          const node = tr.doc.nodeAt(range.from)
+          if (node && node.type.name === 'mathBlock') {
+            ensureNeighborParagraphs(tr, range.from, range.from + node.nodeSize)
+          }
         }
       })
     ]
+  },
+
+  // Registra el comando setMath y garantiza párrafos alrededor del bloque
+  // para poder escribir arriba/abajo (ver ensureParagraphsAroundInsertedNode).
+  addCommands() {
+    return {
+      setMath: (options: { tex: string }) => ({ commands, tr }) => {
+        const ok = commands.insertContent({ type: this.name, attrs: { tex: options.tex } })
+        if (!ok) return false
+        ensureParagraphsAroundInsertedNode(tr, this.name)
+        return true
+      },
+    }
+  },
+
+  addKeyboardShortcuts() {
+    return atomBlockKeyboardShortcuts(this.name)
   },
 
   addNodeView() {

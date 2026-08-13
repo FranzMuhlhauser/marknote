@@ -13,7 +13,7 @@ const CELL = 18
 const GAP = 2
 const PAD = 8
 const W = MAX_GRID * (CELL + GAP) - GAP + PAD * 2
-const H = MAX_GRID * (CELL + GAP) - GAP + PAD * 2 + 32
+const H = MAX_GRID * (CELL + GAP) - GAP + PAD * 2 + 50
 
 export function TableSizePicker({ position, defaultSize, onSelect, onClose }: TableSizePickerProps) {
   const [hoveredRows, setHoveredRows] = useState(defaultSize?.rows ?? 1)
@@ -99,6 +99,9 @@ export function TableSizePicker({ position, defaultSize, onSelect, onClose }: Ta
           onFocus={e => e.target.select()}
         />
         {exceedsGrid && <span className="table-size-exceed">+</span>}
+      </div>
+      <div className="table-size-hint">
+        <kbd>Shift+Tab</kbd> sale de la tabla
       </div>
     </div>
   )

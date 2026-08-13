@@ -22,8 +22,10 @@ export const MathInline = Node.create({
     return [{ tag: 'span[data-math-inline]' }]
   },
 
-  renderHTML({ HTMLAttributes }) {
-    return ['span', mergeAttributes(HTMLAttributes, { 'data-math-inline': '' }), 0]
+  renderHTML({ HTMLAttributes, node }) {
+    // El texto interior evita que turndown trate el span como "blank" (su
+    // blankRule descartaría la fórmula) y preserva los espacios adyacentes.
+    return ['span', mergeAttributes(HTMLAttributes, { 'data-math-inline': '' }), `$${node.attrs.tex}$`]
   },
 
   addPasteRules() {

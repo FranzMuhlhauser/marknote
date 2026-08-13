@@ -10,10 +10,12 @@ interface FileAPI {
   openFile: () => Promise<{ filePath: string; content: string } | null>
   openCsvFile: () => Promise<{ filePath: string; content: string } | null>
   saveFile: (filePath?: string, content?: string) => Promise<SaveResult | null>
+  askSavePath: () => Promise<string | null>
   openFolder: () => Promise<string | null>
   listFiles: (folderPath: string) => Promise<{ name: string; path: string }[]>
   readFile: (filePath: string) => Promise<string>
-  readImage: (filePath: string) => Promise<string | null>
+  readMedia: (filePath: string, baseDir?: string) => Promise<string | null>
+  saveAsset: (args: { mdPath: string; fileName: string; dataBase64: string }) => Promise<string | null>
   writeFile: (filePath: string, content: string) => Promise<SaveResult>
   onUpdateStatus: (callback: (status: string, payload?: any) => void) => void
   startDownloadUpdate: () => Promise<void>

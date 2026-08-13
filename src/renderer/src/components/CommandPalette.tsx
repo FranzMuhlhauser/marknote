@@ -32,8 +32,8 @@ const COMMANDS: Cmd[] = [
     openTablePicker(e, { x, y })
   } },
   { id: 'math-inline', label: 'Fórmula en línea', action: e => e.chain().focus().insertContent({ type: 'mathInline', attrs: { tex: '' } }).run() },
-  { id: 'math-block', label: 'Bloque de fórmula', action: e => e.chain().focus().insertContent({ type: 'mathBlock', attrs: { tex: '' } }).run() },
-  { id: 'mermaid', label: 'Diagrama Mermaid', action: e => e.chain().focus().insertContent({ type: 'mermaidBlock', attrs: { code: '' } }).run() },
+  { id: 'math-block', label: 'Bloque de fórmula', action: e => e.chain().focus().setMath({ tex: '' }).run() },
+  { id: 'mermaid', label: 'Diagrama Mermaid', action: e => e.chain().focus().setMermaid({ code: '' }).run() },
   { id: 'hr', label: 'Línea horizontal', action: e => e.chain().focus().setHorizontalRule().run() },
   { id: 'link', label: 'Insertar enlace', action: async e => { const url = await showPrompt('URL:'); if (url) e.chain().focus().setLink({ href: url }).run() } },
   { id: 'image', label: 'Insertar imagen', action: async e => {

@@ -1,9 +1,73 @@
 import MarkdownIt from 'markdown-it'
 import Turndown from 'turndown'
 import DOMPurify from 'dompurify'
+import { parseVideoUrl } from './video'
 
 const md = new MarkdownIt({ html: true, linkify: true, typographer: true })
-const turndown = new Turndown({ headingStyle: 'atx', codeBlockStyle: 'fenced' })
+
+// Serializadores de los nodos "atom" (imagen, video, mermaid, matemáticas):
+// sus datos viajan en atributos y el elemento queda vacío, así que turndown
+// los marca como "blank" (textContent vacío) y su blankRule —que tiene
+// prioridad sobre cualquier addRule— los descartaría silenciosamente. Por eso
+// se enchufan a blankReplacement en lugar de registrarse como reglas.
+function imageReplacement(node: any): string {
+  const src = node.getAttribute('src') || ''
+  if (!src) return ''
+  const alt = node.getAttribute('alt') || ''
+  const title = node.getAttribute('title')
+  const width = node.getAttribute('width')
+  const height = node.getAttribute('height')
+  const align = node.getAttribute('align')
+  // Sin tamaño/alineación personalizados: Markdown estándar.
+  if (!width && !height && (!align || align === 'center')) {
+    return `\n\n![${alt}](${src}${title ? ` "${title}"` : ''})\n\n`
+  }
+  // Con personalización: HTML (el parseHTML del nodo image acepta <img>).
+  const attrs = [`src="${src}"`, `alt="${alt}"`]
+  if (title) attrs.push(`title="${title}"`)
+  if (width) attrs.push(`width="${width}"`)
+  if (height) attrs.push(`height="${height}"`)
+  if (align && align !== 'center') attrs.push(`align="${align}"`)
+  return `\n\n<img ${attrs.join(' ')}>\n\n`
+}
+
+// Videos: fence ```video con la URL (sintaxis documentada en la base de
+// conocimiento); al cargar, preprocessMediaBlocks los restaura.
+function videoReplacement(node: any): string {
+  const src = (node.getAttribute('src') || '').trim()
+  if (!src) return ''
+  return `\n\n\`\`\`video\n${src}\n\`\`\`\n\n`
+}
+
+// Mermaid: fence ```mermaid estándar (lo renderiza GitHub y otros visores).
+function mermaidReplacement(node: any): string {
+  const code = node.getAttribute('code') || ''
+  if (!code.trim()) return ''
+  return `\n\n\`\`\`mermaid\n${code}\n\`\`\`\n\n`
+}
+
+// Devuelve la serialización del nodo si es un bloque atom conocido, o null
+// para que blankReplacement aplique el comportamiento por defecto.
+function serializeAtomNode(node: any): string | null {
+  if (node.nodeName === 'DIV') {
+    if (node.getAttribute?.('data-resizable-image') !== null) return imageReplacement(node)
+    if (node.getAttribute?.('data-video-block') !== null) return videoReplacement(node)
+    if (node.getAttribute?.('data-mermaid') !== null) return mermaidReplacement(node)
+    if (node.getAttribute?.('data-math-block') !== null) {
+      return `$$\n${node.getAttribute('data-tex') || ''}\n$$`
+    }
+  } else if (node.nodeName === 'SPAN' && node.getAttribute?.('data-math-inline') !== null) {
+    return `$${node.getAttribute('data-tex') || ''}$`
+  }
+  return null
+}
+
+const turndown = new Turndown({
+  headingStyle: 'atx',
+  codeBlockStyle: 'fenced',
+  blankReplacement: (_content: string, node: any) =>
+    serializeAtomNode(node) ?? (node.isBlock ? '\n\n' : '')
+})
 
 turndown.addRule('strikethrough', {
   filter: ['s', 'del'],
@@ -13,6 +77,17 @@ turndown.addRule('strikethrough', {
 turndown.addRule('highlight', {
   filter: ['mark'],
   replacement: content => `==${content}==`
+})
+
+// Math inline: el span lleva la fórmula como texto interior (ver renderHTML
+// de MathInline), así que no es "blank" y esta regla sí llega a evaluarse.
+turndown.addRule('mathInline', {
+  filter: (node: any) => {
+    return node.nodeName === 'SPAN' && node.getAttribute?.('data-math-inline') !== null
+  },
+  replacement: (_content: string, node: any) => {
+    return `$${node.getAttribute('data-tex') || ''}$`
+  }
 })
 
 turndown.addRule('taskList', {
@@ -46,26 +121,6 @@ turndown.addRule('taskList', {
         return line
       })
     return items.join('\n') + '\n\n'
-  }
-})
-
-turndown.addRule('mathBlock', {
-  filter: (node: any) => {
-    return node.nodeName === 'DIV' && node.getAttribute?.('data-math-block') !== null
-  },
-  replacement: (_content: string, node: any) => {
-    const tex = node.getAttribute('data-tex') || ''
-    return `$$\n${tex}\n$$`
-  }
-})
-
-turndown.addRule('mathInline', {
-  filter: (node: any) => {
-    return node.nodeName === 'SPAN' && node.getAttribute?.('data-math-inline') !== null
-  },
-  replacement: (_content: string, node: any) => {
-    const tex = node.getAttribute('data-tex') || ''
-    return `$${tex}$`
   }
 })
 
@@ -127,6 +182,29 @@ turndown.addRule('table', {
     return out.join('\n') + '\n\n'
   }
 })
+
+function escapeAttr(s: string): string {
+  // &#10; mantiene los saltos de línea dentro del atributo en una sola línea
+  // física: un HTML block de markdown-it termina en la primera línea en
+  // blanco, y getAttribute los decodifica de vuelta a '\n'.
+  return s.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/\n/g, '&#10;')
+}
+
+// Convierte los fences ```video / ```mermaid en los divs que los nodos del
+// editor reconocen. Debe ejecutarse antes que preprocessMath y
+// preprocessTaskLists, que esconden los bloques ``` restantes.
+function preprocessMediaBlocks(source: string): string {
+  return source.replace(/```(video|mermaid)[ \t]*\n([\s\S]*?)\n[ \t]*```/g, (_, lang, body) => {
+    if (lang === 'video') {
+      const src = body.trim()
+      if (!src) return ''
+      const { type, src: normalized } = parseVideoUrl(src)
+      return `<div data-video-block src="${escapeAttr(normalized)}" type="${type}"></div>\n\n`
+    }
+    if (!body.trim()) return ''
+    return `<div data-mermaid code="${escapeAttr(body)}"></div>\n\n`
+  })
+}
 
 function preprocessTaskLists(source: string): string {
   const blocks: string[] = []
@@ -190,7 +268,7 @@ function preprocessMath(source: string): string {
 }
 
 export function mdToHtml(source: string): string {
-  const html = md.render(preprocessTaskLists(preprocessMath(source)))
+  const html = md.render(preprocessTaskLists(preprocessMath(preprocessMediaBlocks(source))))
   // El Markdown puede contener HTML crudo (html: true); se sanea antes de
   // insertarlo en el editor para neutralizar scripts/eventos maliciosos.
   return DOMPurify.sanitize(html)

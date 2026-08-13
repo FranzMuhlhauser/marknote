@@ -1,6 +1,6 @@
 import { app, BrowserWindow, ipcMain, dialog, Menu, session } from 'electron'
-import { join, basename, extname, isAbsolute, resolve } from 'path'
-import { readFile, writeFile, readdir, mkdir, rename, copyFile, unlink } from 'fs/promises'
+import { join, basename, extname, dirname, isAbsolute, resolve } from 'path'
+import { readFile, writeFile, readdir, mkdir, rename, copyFile, unlink, access } from 'fs/promises'
 import { constants as fsConstants } from 'fs'
 import { autoUpdater } from 'electron-updater'
 import { authorizePath, assertFileAllowed, getWorkspaceFolder, isMarkdownPath, isMoveAllowed, isSafeName, isValidPathInput, setWorkspaceFolder } from './paths'
@@ -164,8 +164,22 @@ ipcMain.handle('dialog:openCsv', async () => {
   return { filePath: result.filePaths[0], content }
 })
 
+// Solo muestra el diálogo de guardar y devuelve la ruta elegida (autorizada),
+// sin escribir nada: el renderer necesita conocer el destino antes de
+// materializar los assets (<doc>.assets) que acompañan al .md.
+ipcMain.handle('dialog:savePath', async () => {
+  const result = await dialog.showSaveDialog(mainWindow!, {
+    filters: [{ name: 'Markdown', extensions: ['md'] }],
+    defaultPath: 'untitled.md'
+  })
+  if (result.canceled || !result.filePath) return null
+  authorizePath(result.filePath)
+  return result.filePath
+})
+
 ipcMain.handle('dialog:save', async (_event, { filePath, content }: { filePath?: string; content: string }) => {
   let path = filePath
+  let fromDialog = false
   if (!path) {
     const result = await dialog.showSaveDialog(mainWindow!, {
       filters: [{ name: 'Markdown', extensions: ['md'] }],
@@ -173,11 +187,15 @@ ipcMain.handle('dialog:save', async (_event, { filePath, content }: { filePath?:
     })
     if (result.canceled || !result.filePath) return null
     path = result.filePath
+    fromDialog = true
   }
   // Un fallo de escritura se devuelve como resultado (no se lanza) para que
   // el renderer pueda informarlo y no marcar el documento como guardado.
   try {
-    assertFileAllowed(path)
+    // Una ruta elegida por el usuario en el diálogo nativo se autoriza
+    // implícitamente (igual que dialog:open); assertFileAllowed solo valida
+    // las rutas que llegan del renderer, evitando escrituras no autorizadas.
+    if (!fromDialog) assertFileAllowed(path)
     await writeFile(path, content, 'utf-8')
     authorizePath(path)
     return { ok: true, path }
@@ -226,26 +244,68 @@ ipcMain.handle('file:read', async (_event, filePath: string) => {
   return content
 })
 
-// Lee una imagen local y la devuelve como data URL para poder incrustarla en
-// el editor. Resuelve rutas relativas contra el workspace abierto y rutas
-// absolutas de Windows (C:/...) o file://. Devuelve null si no es imagen o
-// no existe — el renderer muestra la imagen rota como en cualquier editor.
-ipcMain.handle('file:readImage', async (_event, filePath: unknown) => {
+// Lee una imagen o video local y lo devuelve como data URL para poder
+// incrustarlo en el editor. Las rutas relativas se resuelven contra el
+// directorio del documento (baseDir) o, en su defecto, contra el workspace;
+// las absolutas de Windows (C:/...) o file:// se usan tal cual. Devuelve null
+// si la extensión no es de medio soportado o el archivo no existe.
+const MEDIA_MIME: Record<string, string> = {
+  '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.gif': 'image/gif',
+  '.webp': 'image/webp', '.bmp': 'image/bmp', '.svg': 'image/svg+xml',
+  '.mp4': 'video/mp4', '.webm': 'video/webm', '.ogg': 'video/ogg', '.mov': 'video/quicktime'
+}
+
+ipcMain.handle('file:readMedia', async (_event, filePath: unknown, baseDir?: unknown) => {
   if (typeof filePath !== 'string' || !filePath.trim()) return null
   // Normaliza file:///C:/... y file://C:/... a C:/... (rutas absolutas Windows)
   let p = filePath.trim().replace(/^file:\/\/\/?/, '')
   if (!isAbsolute(p)) {
-    const wf = getWorkspaceFolder()
-    if (!wf) return null
-    p = resolve(wf, p)
+    const base = typeof baseDir === 'string' && isAbsolute(baseDir) ? baseDir : getWorkspaceFolder()
+    if (!base) return null
+    p = resolve(base, p)
   }
   if (!/^[^\x00]+$/.test(p)) return null
-  const ext = extname(p).toLowerCase()
-  if (!['.png', '.jpg', '.jpeg', '.gif', '.webp', '.bmp', '.svg'].includes(ext)) return null
+  const mime = MEDIA_MIME[extname(p).toLowerCase()]
+  if (!mime) return null
   try {
     const data = await readFile(p)
-    const mime = ext === '.svg' ? 'image/svg+xml' : `image/${ext.slice(1)}`
     return `data:${mime};base64,${data.toString('base64')}`
+  } catch {
+    return null
+  }
+})
+
+// Escribe un medio embebido (base64) en la carpeta <doc>.assets junto al .md
+// y devuelve la ruta relativa para referenciarlo desde el Markdown. El .md
+// debe estar autorizado: los assets heredan su permiso por vivir bajo su
+// directorio (mismo criterio que isMoveAllowed para renombrados).
+ipcMain.handle('file:saveAsset', async (_event, args: { mdPath?: unknown; fileName?: unknown; dataBase64?: unknown }) => {
+  try {
+    const { mdPath, fileName, dataBase64 } = args ?? {}
+    if (typeof mdPath !== 'string' || !isValidPathInput(mdPath)) return null
+    if (!isSafeName(fileName) || typeof dataBase64 !== 'string') return null
+    const ext = extname(fileName).slice(1).toLowerCase()
+    if (!MEDIA_MIME['.' + ext]) return null
+    if (!/^[A-Za-z0-9+/=\s]+$/.test(dataBase64)) return null
+    assertFileAllowed(mdPath)
+    const assetsDirName = basename(mdPath, extname(mdPath)) + '.assets'
+    const assetsDir = join(dirname(mdPath), assetsDirName)
+    await mkdir(assetsDir, { recursive: true })
+    // Nunca sobrescribe: ante colisión añade sufijo numérico.
+    const stem = basename(fileName, extname(fileName))
+    let name = fileName
+    for (let n = 1; ; n++) {
+      try {
+        await access(join(assetsDir, name))
+        name = `${stem}-${n}.${ext}`
+      } catch {
+        break
+      }
+    }
+    const target = join(assetsDir, name)
+    await writeFile(target, Buffer.from(dataBase64, 'base64'))
+    authorizePath(target)
+    return `${assetsDirName}/${name}`
   } catch {
     return null
   }
