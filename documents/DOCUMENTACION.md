@@ -90,6 +90,7 @@ marknote/
 │           │   ├── Settings.tsx       # Panel de configuración (temas, plugins, atajos, diccionario)
 │           │   ├── WelcomeScreen.tsx  # Pantalla de bienvenida
 │           │   ├── OnboardingModal.tsx # Guía interactiva de 7 pasos (primera ejecución)
+│           │   ├── WhatsNewModal.tsx  # Novedades de la versión al actualizar (desde el Historial)
 │           │   ├── MentorModal.tsx    # Explorador educativo de sintaxis Markdown
 │           │   ├── MarkdownHintCard.tsx # Tarjeta educativa al hacer hover en botones
 │           │   ├── TableContextMenu.tsx # Menú contextual para tablas
@@ -329,6 +330,7 @@ La aplicación sigue un diseño de **3 columnas**:
 - Al salir de la app, instala automáticamente la actualización
 - Configuración `publish` en `electron-builder.yml` apuntando a GitHub Releases
 - El artefacto de release (Setup.exe) se publica en GitHub para que `electron-updater` lo detecte
+- **Novedades de la versión**: tras instalar una actualización, la app muestra un modal (`WhatsNewModal.tsx`) con los cambios de la versión (nuevo, mejoras, correcciones), extraídos del **Historial de Versiones** de `documents/DOCUMENTACION.md`; se puede reabrir desde **Ayuda → Novedades de esta versión**. En la primera instalación no se muestra (el onboarding da la bienvenida). La versión actual se obtiene vía IPC `app:getVersion` y la última versión vista se guarda en `localStorage` (`marknote-last-seen-version`)
 
 ### Traducción
 - Interfaz completa en español (menús, tooltips, placeholders, labels)
@@ -359,6 +361,7 @@ La aplicación sigue un diseño de **3 columnas**:
 | `window:toggleFullscreen` | Alterna pantalla completa (menú Ver) |
 | `app:quit` | Cierra la aplicación |
 | `app:getStartupFile` | Devuelve el archivo .md recibido al iniciar (segunda instancia / línea de comandos / asociación) |
+| `app:getVersion` | Devuelve la versión actual de la aplicación (la usa el modal de novedades) |
 | `spellcheck:addWord` | Agrega una palabra al diccionario personalizado del spell checker |
 | `spellcheck:removeWord` | Elimina una palabra del diccionario personalizado |
 | `spellcheck:addWords` | Agrega múltiples palabras en lote (usado al iniciar) |
@@ -456,7 +459,7 @@ Para crear un nuevo Release:
 1. Actualizar `version` en `package.json`
 2. `npm run build:win` — genera `dist-electron/Marknote-<version>-Setup.exe`
 3. Commit + push
-4. `npm run release` — crea tag, pusha, crea GitHub Release con release notes automáticos, y sube los artefactos (Setup.exe, blockmap, latest.yml)
+4. `npm run release` — crea tag, pusha, crea GitHub Release con release notes extraídas del **Historial de Versiones** de `documents/DOCUMENTACION.md` (automáticas si no encuentra la versión), y sube los artefactos (Setup.exe, blockmap, latest.yml)
 5. `electron-updater` detectará automáticamente la nueva versión en los clientes existentes
 
 El script `scripts/release.ps1` automatiza los pasos 4-5. Requiere `gh` CLI autenticado y working tree limpio (o `-Force`).
@@ -467,6 +470,7 @@ El script `scripts/release.ps1` automatiza los pasos 4-5. Requiere `gh` CLI aute
 
 | Versión | Fecha | Cambios |
 |---|---|---|
+| v1.0.0 | 2026-08-13 | **Nuevo**: 📷 Fotos y videos en tus documentos — agrega fotos y videos con los botones 🖼️ y 🎬 de la barra superior: elige un archivo desde tu computadora o pega un enlace (por ejemplo, de YouTube) · 🎉 Novedades de la versión — cada vez que la app se actualice, se abrirá una ventana contándote qué hay de nuevo, qué mejoró y qué errores se corrigieron; puedes volver a verla en el menú Ayuda → Novedades de esta versión · 💡 Aviso para salir de las tablas — cuando escribes dentro de una tabla, aparece una pequeña nota flotante que te recuerda cómo salir: presionar Shift+Tab · **Mejoras**: 🗂️ Tus imágenes ya no se pierden — las fotos y videos que agregas se guardan en una carpeta junto a tu documento (por ejemplo, `mi-nota.assets`); si llevas el documento a otra computadora, las imágenes van con él · ⊞ El botón de tablas te sigue — el botón ⊞ (el que abre las opciones de la tabla) se mantiene siempre junto a tu tabla, aunque te desplaces por el documento · **Correcciones**: 💾 Guardar ya no pregunta de más — cuando guardas un documento y sigues escribiendo, al presionar Ctrl+S se actualiza el mismo archivo; antes volvía a preguntar dónde guardar, como si fuera un documento nuevo cada vez · 🖼️ Imágenes escritas a mano — ahora puedes insertar una imagen escribiendo tú mismo el formato Markdown `![nombre](ruta-de-la-imagen)` y aparecerá correctamente · ⊞ El botón correcto en la tabla correcta — si tenías varias tablas, el botón ⊞ aparecía siempre en la primera del documento; ahora aparece en la tabla que realmente estás usando |
 | v0.1.6 (fix imágenes) | 2026-08-12 | **Fix inserción de imágenes por sintaxis Markdown** `![alt](ruta)` (bug: quedaba como texto): input rule en ResizableImage, detección en pegado (`handlePaste` inserta el nodo directo, saltando markdown-it/DOMPurify que eliminan rutas locales), nuevo IPC `file:readImage` que resuelve rutas locales/`file://`/relativas a data URL en el editor, atributo `title` en el nodo · **Botón 🖼️ en la barra de herramientas**: diálogo `ImageSourcePicker` con dos opciones — buscar imagen en el PC (data URL) o pegar URL de internet; cierra con Escape y limpia hints visibles |
 | v0.1.6 | 2026-08 | Fix bug copiar/pegar, cambios en la barra inicial, Tab en tabla crea fila nueva si es la última celda, Shift+Tab sale de la tabla |
 | v0.1.6 (fixes auditoría) | 2026-08-12 | **Fase 1** (altos): posiciones reales en Búsqueda/Reemplazo (`doc.descendants`), `file:duplicate` sin bucle infinito (límite 100 + `COPYFILE_EXCL`), validación de rutas en IPC de archivos (`authorizedPaths` + workspace, canal `paths:seed`) · **Fase 2** (medios): CSP en producción + DOMPurify en `mdToHtml`, errores de guardado (`performSave`, IPC devuelve `{ok,error}`), debounce de `htmlToMd` en `onUpdate`, F11 = Modo Enfoque en UI, atajos inexistentes removidos de la paleta, script `lint` eliminado · **Fase 3** (limpieza): `lang="es"` en index.html, dead code (`pendingSourceContentRef`, `DEFAULT_MD`, `markdownHintSeen/MarkSeen`, re-export `tableSortKey`, param `setShowWelcome`), CSS muerto (`.math-error`), `createTableNode` sin export, devDeps `@types/katex` (katex trae sus tipos) y `png-to-ico` (doc: "no usar") eliminadas · **Fase 4** (DRY): `utils/video.ts` (regex de YouTube único, antes duplicado en VideoBlock y SlashCommand), `utils/fileUtils.ts` (FileReader/selector de imagen compartidos en SlashCommand, CommandPalette y drag&drop), factoría `withCellAlign()` (unifica TableCell/TableHeader), módulo `src/main/paths.ts` (validación de rutas extraída de `index.ts`) |

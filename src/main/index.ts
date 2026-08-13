@@ -390,6 +390,8 @@ ipcMain.handle('app:getStartupFile', () => {
   return filePath
 })
 
+ipcMain.handle('app:getVersion', () => app.getVersion())
+
 ipcMain.handle('spellcheck:addWord', (_event, word: string) => {
   session.defaultSession.addWordToSpellCheckerDictionary(word)
 })

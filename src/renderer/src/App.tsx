@@ -16,6 +16,7 @@ import { TabBar } from './components/TabBar'
 import { WelcomeScreen } from './components/WelcomeScreen'
 import { Settings } from './components/Settings'
 import { OnboardingModal } from './components/OnboardingModal'
+import { WhatsNewModal } from './components/WhatsNewModal'
 import { TableContextMenu } from './components/TableContextMenu'
 import { TableSizePicker } from './components/TableSizePicker'
 import { ConfirmDialog } from './components/ConfirmDialog'
@@ -282,6 +283,27 @@ function App() {
   const openFileFromExplorerRef = useRef(tabs.openFileFromExplorer)
   openFileFromExplorerRef.current = tabs.openFileFromExplorer
 
+  // Novedades de la versión: al actualizar la app se abre el modal con los
+  // cambios; en la primera instalación no (el onboarding da la bienvenida).
+  useEffect(() => {
+    if (!ui.appVersion) return
+    const lastSeen = localStorage.getItem('marknote-last-seen-version')
+    if (!lastSeen) {
+      localStorage.setItem('marknote-last-seen-version', ui.appVersion)
+      return
+    }
+    if (lastSeen !== ui.appVersion) {
+      ui.setShowWhatsNew(true)
+    }
+  }, [ui.appVersion])
+
+  const closeWhatsNew = useCallback(() => {
+    if (ui.appVersion) {
+      localStorage.setItem('marknote-last-seen-version', ui.appVersion)
+    }
+    ui.setShowWhatsNew(false)
+  }, [ui.appVersion])
+
   useEffect(() => {
     const handleStartup = async () => {
       const startupFile = await window.api.getStartupFile()
@@ -429,6 +451,7 @@ function App() {
         onStats={() => ui.setShowStats((s: any) => !s)}
         onCommandPalette={() => ui.setShowPalette(true)}
         onShowOnboarding={() => ui.setShowOnboarding(true)}
+        onShowWhatsNew={() => ui.setShowWhatsNew(true)}
         focusMode={ui.focusMode}
         showOutline={ui.showOutline}
       />
@@ -569,6 +592,7 @@ function App() {
       )}
       {ui.showMentor && <MentorModal onClose={() => ui.setShowMentor(false)} />}
       {ui.showOnboarding && <OnboardingModal onClose={() => ui.setShowOnboarding(false)} />}
+      {ui.showWhatsNew && ui.appVersion && <WhatsNewModal version={ui.appVersion} onClose={closeWhatsNew} />}
       {ui.showSettings && (
         <Settings
           theme={ui.theme}

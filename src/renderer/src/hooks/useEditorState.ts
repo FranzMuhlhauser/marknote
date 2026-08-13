@@ -28,6 +28,8 @@ export function useEditorState() {
   const [showMentor, setShowMentor] = useState(false)
   const [showWelcome, setShowWelcome] = useState(true)
   const [showOnboarding, setShowOnboarding] = useState(() => localStorage.getItem('marknote-onboarding-shown') !== 'true')
+  const [showWhatsNew, setShowWhatsNew] = useState(false)
+  const [appVersion, setAppVersion] = useState<string | null>(null)
   const [tableMenuPos, setTableMenuPos] = useState<{ x: number; y: number } | null>(null)
   const [tableBtnPos, setTableBtnPos] = useState<{ x: number; y: number } | null>(null)
   const [tablePickerPos, setTablePickerPos] = useState<{ x: number; y: number } | null>(null)
@@ -77,6 +79,10 @@ export function useEditorState() {
   }, [])
 
   useEffect(() => {
+    window.api.getVersion().then(setAppVersion, () => {})
+  }, [])
+
+  useEffect(() => {
     const mq = window.matchMedia('(prefers-color-scheme: dark)')
     const handler = () => {
       if (theme === 'system') {
@@ -106,6 +112,8 @@ export function useEditorState() {
     showMentor, setShowMentor,
     showWelcome, setShowWelcome,
     showOnboarding, setShowOnboarding,
+    showWhatsNew, setShowWhatsNew,
+    appVersion, setAppVersion,
     tableMenuPos, setTableMenuPos,
     tableBtnPos, setTableBtnPos,
     tablePickerPos, setTablePickerPos,

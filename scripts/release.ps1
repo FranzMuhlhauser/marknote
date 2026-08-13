@@ -97,12 +97,47 @@ if ($LASTEXITCODE -ne 0) {
 Write-Host " OK" -ForegroundColor Green
 
 # ─── 8. Crear o actualizar Release en GitHub ─────────────────────────
-# --generate-notes falla si el release ya existe; --notes passthru
+# Release notes curadas desde el Historial de Versiones de documents/DOCUMENTACION.md.
+# Si no se encuentra la fila de la versión, se cae a --generate-notes.
+Write-Host "[release] Construyendo release notes..." -NoNewline
+$notesFile = "$distDir\release-notes-$version.md"
+# Leer con UTF-8 explícito: el archivo es UTF-8 sin BOM y PS 5.1 usaría ANSI.
+$utf8 = New-Object System.Text.UTF8Encoding($false)
+$doc = [System.IO.File]::ReadAllText("$PROJECT_ROOT\documents\DOCUMENTACION.md", [System.Text.Encoding]::UTF8)
+$rows = @($doc -split "`n" | Where-Object { $_ -match "^[ \t]*\|[ \t]*v$([regex]::Escape($version))(\s|\|)" -and $_ -match "\|$" })
+$notesLines = @("# $tag")
+
+if ($rows.Count -gt 0) {
+  foreach ($row in $rows) {
+    $cells = @($row.Trim().Trim('|').Split('|') | ForEach-Object { $_.Trim() })
+    if ($cells.Count -lt 3) { continue }
+    $date = $cells[1]
+    $changes = ($cells[2..($cells.Count - 1)] -join '|').Trim()
+    $notesLines += ""
+    $notesLines += "Fecha: $date"
+    $notesLines += ""
+    $notesLines += ($changes.Split('·') | ForEach-Object {
+      $item = $_.Trim()
+      if ($item.Length -gt 0) { "- $item" }
+    })
+  }
+  [System.IO.File]::WriteAllLines($notesFile, $notesLines, $utf8)
+  Write-Host " OK" -ForegroundColor Green
+  Write-Host "[release] Notas: $notesFile" -ForegroundColor Green
+} else {
+  Write-Host " no hay fila para $tag en DOCUMENTACION.md" -ForegroundColor Yellow
+  Write-Host "[release] Usando --generate-notes como respaldo."
+}
+
 Write-Host "[release] Creando release..." -NoNewline
-$releaseOutput = gh release create $tag `
-  --title $tag `
-  --generate-notes `
-  --repo FranzMuhlhauser/marknote 2>&1
+$releaseArgs = @("release", "create", $tag, "--title", $tag)
+if ($rows.Count -gt 0) {
+  $releaseArgs += "--notes-file", $notesFile
+} else {
+  $releaseArgs += "--generate-notes"
+}
+$releaseArgs += "--repo", "FranzMuhlhauser/marknote"
+$releaseOutput = gh @releaseArgs 2>&1
 $releaseExitCode = $LASTEXITCODE
 
 if ($releaseExitCode -eq 0) {
