@@ -222,6 +222,7 @@ La aplicación sigue un diseño de **3 columnas**:
 - **Texto alternativo** (alt): doble click sobre la imagen o botón en toolbar
 - **Dimensiones numéricas** precisas (width × height)
 - Toolbar flotante con opciones de alineación, redimensionar y alt text
+- **Recuperación de imágenes faltantes**: si el archivo referenciado no existe (p. ej. carpeta `<doc>.assets` borrada), se muestra un placeholder con «Reemplazar…» / «Reintentar» (ver P15)
 
 ### Matemáticas (KaTeX)
 - Fórmulas inline: `$E = mc^2$`
@@ -3803,4 +3804,89 @@ Se reemplazaron `transformPastedHTML` y `transformPastedText` por un único cont
 | Pointer events desactivados en disabled | Manejar hover con JS | Poner `pointer-events: none` previene de forma nativa que las clases hover de CSS alteren el borde o fondo del botón, y evita tener que evaluar estados booleanos en todos los triggers de mouse. |
 | Validar la presencia de la tabla antes de interceptar `Tab` | Interceptar `Tab` globalmente | Retornar `false` inmediatamente en la extensión si el cursor no está en un nodo `table` permite que la tecla `Tab` siga fluyendo para otras necesidades de accesibilidad del navegador. |
 
+## P15 — Recuperación de imágenes y videos con archivos faltantes (2026-08-22)
 
+### Estado
+
+✅ **Implementado** (2026-08-22)
+
+### Problema resuelto
+
+1. **Asset borrado nunca se recrea**: si se eliminaba sin querer la carpeta `<doc>.assets` de una nota, el `.md` seguía referenciando `nota.assets/image-1.png` como ruta relativa y al volver a guardar esa referencia se ignoraba por completo: el archivo jamás se recreaba.
+2. **Archivo creado pero invisible en el editor**: la resolución de rutas locales de medios era de un solo intento por cambio de `src`; si `readMedia` fallaba (archivo ausente) el nodo quedaba roto para siempre, sin reintento ni feedback visual.
+3. **Pegado de archivos de imagen no soportado**: el pegado solo procesaba texto/markdown; copiar un archivo de imagen desde el Explorador o una captura no se interceptaba (el drag & drop sí).
+
+### Causa raíz
+
+- `materializeMedia()` (`src/renderer/src/utils/mediaAssets.ts`) únicamente materializa srcs embebidos `data:`/`blob:` al guardar; las referencias locales cuyo archivo desapareció quedan huérfanas sin mecanismo de detección ni recuperación.
+- Los nodeviews de imagen/video resolvían su ruta local vía IPC una única vez y ante fallo dejaban `resolvedSrc = null`, renderizando `<img src="ruta-relativa">` que el navegador no puede cargar.
+- Los bytes originales borrados no son recuperables por la app; la solución es detectarlos y ofrecer recuperación guiada (reemplazo), no restauración automática.
+
+### Implementación
+
+#### 1. Hook compartido `useResolvedMediaSrc` (`src/renderer/src/hooks/useMediaSrc.ts`)
+- Estados por medio: `native` (data:/blob:/http cargan solos) → `loading` → `ok` | `missing`.
+- `retry()` manual y reintento automático selectivo vía evento global `MEDIA_RETRY_EVENT` (`marknote:media-retry`): tras cada guardado solo se reconsultan los nodos en estado `missing`, no todos los medios.
+- Elimina la duplicación del patrón de resolución que existía entre `ResizableImage.tsx` y `VideoBlock.tsx`.
+
+#### 2. Placeholder con recuperación guiada (imagen y video)
+- Estado `missing`: reemplaza el `<img>`/`<video>` roto por un aviso visible con la ruta faltante y dos acciones:
+  - **Reemplazar…**: abre el selector de archivos (`pickImageAsDataURL`, filtro `video/*` en videos), inserta el archivo como data URL y el siguiente guardado lo materializa en `<doc>.assets` con el pipeline existente.
+  - **Reintentar**: vuelve a consultar el disco (cubre restaurar de la papelera o recreación externa).
+- Estilos `.media-missing-*` en `App.css`, reutilizando el patrón visual de `.video-block-placeholder`.
+
+#### 3. `onError` para URLs remotas
+- En imágenes no locales, un fallo de carga http(s) activa el mismo placeholder («Reintentar» limpia el estado). Durante la resolución IPC no se escucha `onError`, para no marcar error por el `src` relativo temporal.
+
+#### 4. Pegado de archivos de imagen (`App.tsx`)
+- `handlePaste` intercepta `clipboardData.files` con tipo `image/*` y los inserta como data URL (mismo tratamiento que drag & drop). Se omite si el portapapeles trae `text/html`, para que copiar una imagen de una web siga insertando su URL remota.
+
+#### 5. Verificación post-guardado por análisis del Markdown (`countMissingLocalMedia`)
+- Tras guardar **cualquier** pestaña (activa o en segundo plano), `performSave` analiza el Markdown guardado extrayendo las referencias locales de medios (imágenes md, `<img>`, fences de video) excluyendo `data:`/`blob:`/http(s), y verifica cada una contra disco reutilizando la IPC existente `file:readMedia` (`null` ⇒ ausente). Si hay faltantes, muestra un toast con el conteo y el documento.
+- Cubre pestañas de fondo porque analiza el texto guardado, no los nodos montados del editor. Una primera versión usaba un registro global de nodos montados en el hook; quedó obsoleta con este enfoque y fue eliminada.
+
+#### Flujo de recuperación resultante
+1. Se borra `nota.assets` → al abrir/reabrir la nota, cada medio ausente muestra su placeholder.
+2. «Reemplazar…» → se elige el archivo → data URL en el nodo → Guardar → `materializeMedia` escribe el asset de nuevo y el nodo apunta a la ruta relativa recreada.
+3. Si algo queda sin archivo al guardar, toast con el conteo y la instrucción.
+
+### Archivos modificados
+
+| Archivo | Cambio |
+|---------|--------|
+| `src/renderer/src/hooks/useMediaSrc.ts` (nuevo) | Hook `useResolvedMediaSrc`: estados, reintento y evento `MEDIA_RETRY_EVENT`. |
+| `src/renderer/src/extensions/ResizableImage.tsx` | Hook + placeholder Reemplazar/Reintentar + `onError` para URLs remotas. |
+| `src/renderer/src/extensions/VideoBlock.tsx` | Hook + placeholder (Reemplazar con filtro `video/*`). |
+| `src/renderer/src/App.css` | Estilos `.media-missing-*`. |
+| `src/renderer/src/App.tsx` | Rama de pegado para archivos de imagen en `handlePaste`. |
+| `src/renderer/src/utils/mediaAssets.ts` | `extractLocalMediaSrcs()` + `countMissingLocalMedia()`. |
+| `src/renderer/src/hooks/useTabs.ts` | Disparo de `MEDIA_RETRY_EVENT` y verificación/toast post-guardado en `performSave`. |
+
+### Validaciones realizadas
+
+1. ✅ `npm run typecheck` — sin errores.
+2. ✅ `npm run build` — compilación exitosa (main + preload + renderer).
+3. ✅ Round-trip de video verificado en código: data URL → fence de video (`videoReplacement`) → regex de `materializeMedia` → `saveAsset`; y al cargar, `preprocessMediaBlocks` → `parseVideoUrl` pasa los `data:` intactos.
+4. ⬜ Manual sugerido: nota con imagen + video → borrar `<doc>.assets` → reabrir (placeholders visibles) → Reemplazar ambos → Guardar → verificar assets recreados y reproducción; pegar archivo de imagen desde el Explorador.
+
+### Decisiones técnicas
+
+| Decisión | Alternativas | Razón |
+|----------|-------------|-------|
+| Verificación post-guardado analizando el Markdown guardado | Registro de nodos montados (v1); IPC nueva `file:mediaExists` con `access()` | El análisis del texto cubre también pestañas en segundo plano, sin IPC nueva ni dependencias nuevas. La IPC dedicada sigue siendo la solución óptima en costo si la restricción se levanta (mejora futura). |
+| Reutilizar `file:readMedia` como chequeo de existencia | Leer archivos con `file:read` | Mismo canal que usa el renderizado, valida mime por extensión y no toca la lista de autorizaciones (`authorizePath`). Costo asumido: devuelve el archivo completo en base64, el chequeo escala con el tamaño de los medios. |
+| Placeholder con Reemplazar/Reintentar en lugar de restauración automática | Caché espejo en AppData para autorrestaurar | Los bytes borrados no existen ya ni en disco ni en memoria; una caché espejo añade duplicación de datos y complejidad sin haber sido solicitada. El reemplazo guiado es simple y reversible. |
+| Pegado de imagen solo cuando NO viene `text/html` | Interceptar siempre los files del portapapeles | Copiar una imagen de una web trae files + HTML: interceptar siempre cambiaría el comportamiento actual (URL remota). Capturas y copias del Explorador solo traen files. |
+| Reintento selectivo vía evento + `statusRef` | Releer todos los medios al guardar / polling | Solo los nodos `missing` reconsultan: costo cero para documentos sanos y sin temporizadores. |
+
+### Limitaciones conocidas
+
+- El chequeo post-guardado lee cada medio referenciado completo (base64 vía IPC): en notas con muchos medios grandes puede añadir latencia al guardar.
+- Extensiones fuera de la whitelist de `MEDIA_MIME` cuentan como faltantes (coincide con lo que el editor puede mostrar/materializar).
+- Las URLs remotas (http/YouTube) no se verifican contra red: su fallo se detecta en pantalla vía placeholder/`onError`, no en el toast.
+
+### Sin cambios en
+
+- Proceso principal y preload (sin handlers ni canales IPC nuevos).
+- Pipeline de materialización (`materializeMedia`, `file:saveAsset`) y formato del `.md`.
+- Comportamiento del drag & drop existente y del pegado de texto/markdown.

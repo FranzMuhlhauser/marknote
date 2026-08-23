@@ -2,7 +2,8 @@ import { Node, mergeAttributes, InputRule } from '@tiptap/core'
 import { NodeViewWrapper, ReactNodeViewRenderer } from '@tiptap/react'
 import { useCallback, useRef, useState, useEffect } from 'react'
 import { ensureNeighborParagraphs, ensureParagraphsAroundInsertedNode, atomBlockKeyboardShortcuts } from './blockNeighbors'
-import { getCurrentDocDir } from '../utils/currentDoc'
+import { useResolvedMediaSrc } from '../hooks/useMediaSrc'
+import { pickImageAsDataURL } from '../utils/fileUtils'
 
 // Declara el comando setImage en la interface Commands (patrón del core: objeto
 // anidado bajo el nombre del nodo, que es lo que KeysWithTypeOf<Commands, object>
@@ -108,18 +109,29 @@ function ImageComponent({ node, updateAttributes, editor }: any) {
   const { src, alt, title, width, height, align } = node.attrs
 
   // Las rutas locales (C:/..., file://, ./) no cargan como src en el navegador;
-  // se resuelven vía IPC a un data URL SOLO para mostrarla. El atributo src del
-  // nodo conserva la ruta original: es lo que se escribe en el .md al guardar.
-  const isLocalPath = src && !/^(https?:|data:|blob:)/i.test(src)
-  const [resolvedSrc, setResolvedSrc] = useState<string | null>(null)
-  useEffect(() => {
-    if (!isLocalPath) { setResolvedSrc(null); return }
-    let cancelled = false
-    window.api.readMedia(src, getCurrentDocDir() ?? undefined).then(dataUrl => {
-      if (!cancelled) setResolvedSrc(dataUrl)
+  // se resuelven vía IPC a un data URL SOLO para mostrarla (ver
+  // useResolvedMediaSrc). El atributo src del nodo conserva la ruta original:
+  // es lo que se escribe en el .md al guardar. Si el archivo no existe en
+  // disco, el estado 'missing' muestra el placeholder de recuperación.
+  const isLocalPath = !!src && !/^(https?:|data:|blob:)/i.test(src)
+  const { status, dataUrl: resolvedSrc, retry } = useResolvedMediaSrc(src, isLocalPath)
+  // Las URLs remotas las carga el <img> por su cuenta: el fallo se detecta con
+  // onError (durante la resolución IPC no se escucha, para no marcar error por
+  // el src relativo temporal).
+  const [loadError, setLoadError] = useState(false)
+  useEffect(() => { setLoadError(false) }, [src])
+  const mediaMissing = status === 'missing' || loadError
+
+  const handleReplaceMedia = useCallback(() => {
+    pickImageAsDataURL().then(url => {
+      if (url) updateAttributes({ src: url })
     })
-    return () => { cancelled = true }
-  }, [src, isLocalPath])
+  }, [updateAttributes])
+
+  const handleRetryMedia = useCallback(() => {
+    setLoadError(false)
+    retry()
+  }, [retry])
 
   const handleAltSave = useCallback(() => {
     updateAttributes({ alt: altText })
@@ -175,53 +187,70 @@ function ImageComponent({ node, updateAttributes, editor }: any) {
       contentEditable={false}
     >
       <div className="resizable-image-container">
-        <img
-          ref={imgRef}
-          src={resolvedSrc ?? src}
-          alt={alt || ''}
-          title={title || undefined}
-          width={width || undefined}
-          height={height || undefined}
-          onDoubleClick={handleDoubleClick}
-          className="resizable-image"
-          draggable={false}
-        />
-        {/* Resize handles */}
-        <div className="resize-handle se" onMouseDown={() => setResizing('se')} title="Resize" />
-        <div className="resize-handle e" onMouseDown={() => setResizing('e')} />
-        <div className="resize-handle s" onMouseDown={() => setResizing('s')} />
+        {mediaMissing ? (
+          <div className="media-missing-placeholder">
+            <span className="media-missing-icon">🖼️</span>
+            <div className="media-missing-info">
+              <span>Imagen no encontrada</span>
+              <span className="media-missing-path" title={src}>{src}</span>
+            </div>
+            <div className="media-missing-actions">
+              <button className="toolbar-btn" onClick={handleReplaceMedia}>Reemplazar…</button>
+              <button className="toolbar-btn" onClick={handleRetryMedia}>Reintentar</button>
+            </div>
+          </div>
+        ) : (
+          <>
+            <img
+              ref={imgRef}
+              src={resolvedSrc ?? src}
+              alt={alt || ''}
+              title={title || undefined}
+              width={width || undefined}
+              height={height || undefined}
+              onDoubleClick={handleDoubleClick}
+              onError={isLocalPath ? undefined : () => setLoadError(true)}
+              className="resizable-image"
+              draggable={false}
+            />
+            {/* Resize handles */}
+            <div className="resize-handle se" onMouseDown={() => setResizing('se')} title="Resize" />
+            <div className="resize-handle e" onMouseDown={() => setResizing('e')} />
+            <div className="resize-handle s" onMouseDown={() => setResizing('s')} />
 
-        {/* Image toolbar */}
-        <div className="resizable-image-toolbar">
-          <button
-            className={`image-toolbar-btn ${align === 'left' ? 'active' : ''}`}
-            onClick={() => setAlignment('left')}
-            title="Alinear izquierda"
-          >⫷</button>
-          <button
-            className={`image-toolbar-btn ${align === 'center' ? 'active' : ''}`}
-            onClick={() => setAlignment('center')}
-            title="Alinear centro"
-          >⫿</button>
-          <button
-            className={`image-toolbar-btn ${align === 'right' ? 'active' : ''}`}
-            onClick={() => setAlignment('right')}
-            title="Alinear derecha"
-          >⫸</button>
-          <button
-            className="image-toolbar-btn"
-            onClick={() => {
-              setSizeInput({ width: node.attrs.width || '', height: node.attrs.height || '' })
-              setEditingSize(true)
-            }}
-            title="Redimensionar"
-          >⤡</button>
-          <button
-            className="image-toolbar-btn"
-            onClick={handleDoubleClick}
-            title="Texto alternativo"
-          >🖉</button>
-        </div>
+            {/* Image toolbar */}
+            <div className="resizable-image-toolbar">
+              <button
+                className={`image-toolbar-btn ${align === 'left' ? 'active' : ''}`}
+                onClick={() => setAlignment('left')}
+                title="Alinear izquierda"
+              >⫷</button>
+              <button
+                className={`image-toolbar-btn ${align === 'center' ? 'active' : ''}`}
+                onClick={() => setAlignment('center')}
+                title="Alinear centro"
+              >⫿</button>
+              <button
+                className={`image-toolbar-btn ${align === 'right' ? 'active' : ''}`}
+                onClick={() => setAlignment('right')}
+                title="Alinear derecha"
+              >⫸</button>
+              <button
+                className="image-toolbar-btn"
+                onClick={() => {
+                  setSizeInput({ width: node.attrs.width || '', height: node.attrs.height || '' })
+                  setEditingSize(true)
+                }}
+                title="Redimensionar"
+              >⤡</button>
+              <button
+                className="image-toolbar-btn"
+                onClick={handleDoubleClick}
+                title="Texto alternativo"
+              >🖉</button>
+            </div>
+          </>
+        )}
       </div>
 
       {/* Alt text input */}

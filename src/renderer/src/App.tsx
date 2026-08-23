@@ -175,6 +175,23 @@ function App() {
           return false
         }
 
+        // Imágenes pegadas como archivo (capturas de pantalla, copiar desde el
+        // explorador): mismo tratamiento que el drag & drop — data URL que se
+        // materializa en <doc>.assets al guardar. Si el portapapeles trae HTML
+        // no se intercepta: copiar una imagen de la web sigue insertando su URL
+        // remota tal como hasta ahora.
+        const clipboardFiles = Array.from(event.clipboardData?.files ?? [])
+        if (clipboardFiles.length > 0 && !event.clipboardData?.getData('text/html')) {
+          const imageFile = clipboardFiles.find(f => f.type.startsWith('image/'))
+          if (imageFile) {
+            event.preventDefault()
+            readFileAsDataURL(imageFile).then(src => {
+              editor?.chain().focus().setImage({ src }).run()
+            }, () => {})
+            return true
+          }
+        }
+
         // Imágenes Markdown: se insertan como nodos image directamente, saltando
         // markdown-it/DOMPurify, que eliminan rutas locales C:/ y file:// (las
         // tratan como esquema no permitido). ImageComponent las resuelve a data URL.

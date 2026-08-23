@@ -2025,6 +2025,47 @@ body {
   user-select: none;
 }
 
+/* Placeholder de medio faltante (archivo borrado o ruta rota) */
+.media-missing-placeholder {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0.9em 1em;
+  border: 2px dashed var(--border);
+  border-radius: 6px;
+  background: var(--bg-secondary);
+  color: var(--text-secondary);
+  font-size: 14px;
+  max-width: 100%;
+}
+
+.media-missing-icon {
+  font-size: 20px;
+  line-height: 1;
+}
+
+.media-missing-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.media-missing-path {
+  font-size: 11px;
+  opacity: 0.8;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 320px;
+}
+
+.media-missing-actions {
+  display: flex;
+  gap: 6px;
+  margin-left: auto;
+}
+
 /* Image alt text / size overlays */
 .image-alt-input-overlay {
   position: fixed;

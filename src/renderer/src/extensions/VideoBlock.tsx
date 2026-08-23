@@ -2,7 +2,8 @@ import { Node, mergeAttributes } from '@tiptap/core'
 import { NodeViewWrapper, ReactNodeViewRenderer } from '@tiptap/react'
 import { useCallback, useRef, useState, useEffect } from 'react'
 import { parseVideoUrl } from '../utils/video'
-import { getCurrentDocDir } from '../utils/currentDoc'
+import { useResolvedMediaSrc } from '../hooks/useMediaSrc'
+import { pickImageAsDataURL } from '../utils/fileUtils'
 import { ensureParagraphsAroundInsertedNode, atomBlockKeyboardShortcuts } from './blockNeighbors'
 
 // Declara el comando setVideo en la interface Commands (mismo patrón que
@@ -76,16 +77,17 @@ function VideoComponent({ node, updateAttributes, editor }: any) {
 
   // Igual que en las imágenes: las rutas locales se resuelven a data URL solo
   // para reproducir; el atributo src conserva la ruta que se guarda en el .md.
+  // Si el archivo no existe en disco, el estado 'missing' muestra el
+  // placeholder de recuperación (ver useResolvedMediaSrc).
   const isLocalPath = !!src && type !== 'youtube' && !/^(https?:|data:|blob:)/i.test(src)
-  const [resolvedSrc, setResolvedSrc] = useState<string | null>(null)
-  useEffect(() => {
-    if (!isLocalPath) { setResolvedSrc(null); return }
-    let cancelled = false
-    window.api.readMedia(src, getCurrentDocDir() ?? undefined).then(dataUrl => {
-      if (!cancelled) setResolvedSrc(dataUrl)
+  const { status, dataUrl: resolvedSrc, retry } = useResolvedMediaSrc(src, isLocalPath)
+  const mediaMissing = status === 'missing'
+
+  const handleReplaceMedia = useCallback(() => {
+    pickImageAsDataURL('video/*').then(url => {
+      if (url) updateAttributes({ src: url, type: 'file' })
     })
-    return () => { cancelled = true }
-  }, [src, isLocalPath])
+  }, [updateAttributes])
 
   const setAlignment = useCallback((a: string) => {
     updateAttributes({ align: a })
@@ -164,70 +166,86 @@ function VideoComponent({ node, updateAttributes, editor }: any) {
       contentEditable={false}
     >
       <div className="resizable-image-container">
-        {type === 'youtube' ? (
-          <iframe
-            ref={videoRef as any}
-            src={src}
-            width={width || undefined}
-            height={height || undefined}
-            className="video-block-player"
-            style={{ aspectRatio: !height && !width ? '16/9' : undefined }}
-            allowFullScreen
-            title="Video de YouTube"
-          />
+        {mediaMissing ? (
+          <div className="media-missing-placeholder">
+            <span className="media-missing-icon">🎬</span>
+            <div className="media-missing-info">
+              <span>Video no encontrado</span>
+              <span className="media-missing-path" title={src}>{src}</span>
+            </div>
+            <div className="media-missing-actions">
+              <button className="toolbar-btn" onClick={handleReplaceMedia}>Reemplazar…</button>
+              <button className="toolbar-btn" onClick={retry}>Reintentar</button>
+            </div>
+          </div>
         ) : (
-          <video
-            ref={videoRef as any}
-            src={resolvedSrc ?? src}
-            width={width || undefined}
-            height={height || undefined}
-            className="video-block-player"
-            controls
-            style={{ maxWidth: '100%' }}
-          >
-            Tu navegador no soporta video.
-          </video>
+          <>
+            {type === 'youtube' ? (
+              <iframe
+                ref={videoRef as any}
+                src={src}
+                width={width || undefined}
+                height={height || undefined}
+                className="video-block-player"
+                style={{ aspectRatio: !height && !width ? '16/9' : undefined }}
+                allowFullScreen
+                title="Video de YouTube"
+              />
+            ) : (
+              <video
+                ref={videoRef as any}
+                src={resolvedSrc ?? src}
+                width={width || undefined}
+                height={height || undefined}
+                className="video-block-player"
+                controls
+                style={{ maxWidth: '100%' }}
+              >
+                Tu navegador no soporta video.
+              </video>
+            )}
+
+            <div className="resize-handle se" onMouseDown={() => setResizing('se')} title="Redimensionar" />
+            <div className="resize-handle e" onMouseDown={() => setResizing('e')} />
+            <div className="resize-handle s" onMouseDown={() => setResizing('s')} />
+
+            <div className="resizable-image-toolbar">
+              <button
+                className={`image-toolbar-btn ${align === 'left' ? 'active' : ''}`}
+                onClick={() => setAlignment('left')}
+                title="Alinear izquierda"
+              >⫷</button>
+              <button
+                className={`image-toolbar-btn ${align === 'center' ? 'active' : ''}`}
+                onClick={() => setAlignment('center')}
+                title="Alinear centro"
+              >⫿</button>
+              <button
+                className={`image-toolbar-btn ${align === 'right' ? 'active' : ''}`}
+                onClick={() => setAlignment('right')}
+                title="Alinear derecha"
+              >⫸</button>
+              <button
+                className="image-toolbar-btn"
+                onClick={() => {
+                  setSizeInput({ width: node.attrs.width || '', height: node.attrs.height || '' })
+                  setEditingSize(true)
+                }}
+                title="Redimensionar"
+              >⤡</button>
+              <button
+                className="image-toolbar-btn"
+                onClick={handleFilePick}
+                title="Seleccionar archivo"
+              >📁</button>
+              <button
+                className="image-toolbar-btn"
+                onClick={() => { setSourceInput(src); setEditingSource(true) }}
+                title="Cambiar URL"
+              >🔗</button>
+            </div>
+          </>
         )}
-
-        <div className="resize-handle se" onMouseDown={() => setResizing('se')} title="Redimensionar" />
-        <div className="resize-handle e" onMouseDown={() => setResizing('e')} />
-        <div className="resize-handle s" onMouseDown={() => setResizing('s')} />
-
-        <div className="resizable-image-toolbar">
-          <button
-            className={`image-toolbar-btn ${align === 'left' ? 'active' : ''}`}
-            onClick={() => setAlignment('left')}
-            title="Alinear izquierda"
-          >⫷</button>
-          <button
-            className={`image-toolbar-btn ${align === 'center' ? 'active' : ''}`}
-            onClick={() => setAlignment('center')}
-            title="Alinear centro"
-          >⫿</button>
-          <button
-            className={`image-toolbar-btn ${align === 'right' ? 'active' : ''}`}
-            onClick={() => setAlignment('right')}
-            title="Alinear derecha"
-          >⫸</button>
-          <button
-            className="image-toolbar-btn"
-            onClick={() => {
-              setSizeInput({ width: node.attrs.width || '', height: node.attrs.height || '' })
-              setEditingSize(true)
-            }}
-            title="Redimensionar"
-          >⤡</button>
-          <button
-            className="image-toolbar-btn"
-            onClick={handleFilePick}
-            title="Seleccionar archivo"
-          >📁</button>
-          <button
-            className="image-toolbar-btn"
-            onClick={() => { setSourceInput(src); setEditingSource(true) }}
-            title="Cambiar URL"
-          >🔗</button>
-        </div>
       </div>
 
       {editingSource && (

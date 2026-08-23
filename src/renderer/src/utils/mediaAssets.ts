@@ -62,3 +62,27 @@ export async function materializeMedia(markdown: string, mdPath: string): Promis
   }
   return { markdown: result, replacements }
 }
+
+// Referencias locales de medios (imágenes y videos) en un Markdown: excluye las
+// embebidas (data:/blob:) y las remotas (http/https, incluido YouTube). Son las
+// rutas que deben existir junto al .md —normalmente bajo <doc>.assets—.
+function extractLocalMediaSrcs(markdown: string): string[] {
+  const srcs = new Set<string>()
+  for (const m of markdown.matchAll(/!\[[^\]]*\]\(([^)\s]+)/g)) srcs.add(m[1])
+  for (const m of markdown.matchAll(/<img [^>]*src="([^"]+)"/g)) srcs.add(m[1])
+  for (const m of markdown.matchAll(/```video[ \t]*\n([^\n]+)\n[ \t]*```/g)) srcs.add(m[1])
+  return Array.from(srcs).filter(s => s && !/^(data:|blob:|https?:)/i.test(s))
+}
+
+// Cuenta cuántas referencias locales apuntan a archivos inexistentes en disco,
+// reutilizando file:readMedia (null ⇒ archivo ausente o mime no soportado).
+// Cubre pestañas activas y en segundo plano porque analiza el texto guardado,
+// no los nodos montados del editor. Costo asumido: readMedia devuelve el
+// archivo completo en base64, así que el chequeo escala con el tamaño de los medios.
+export async function countMissingLocalMedia(markdown: string, docDir: string | null): Promise<number> {
+  const checks: Promise<number>[] = extractLocalMediaSrcs(markdown).map(src =>
+    window.api.readMedia(src, docDir ?? undefined).then(result => (result ? 1 : 0))
+  )
+  const results = await Promise.all(checks)
+  return results.reduce((total, n) => total + n, 0)
+}

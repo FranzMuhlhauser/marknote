@@ -1,7 +1,8 @@
 import { useState, useCallback, useEffect, useRef } from 'react'
 import { htmlToMd, mdToHtml } from '../utils/markdown'
-import { materializeMedia } from '../utils/mediaAssets'
+import { materializeMedia, countMissingLocalMedia } from '../utils/mediaAssets'
 import { setCurrentDocDir, dirOfPath } from '../utils/currentDoc'
+import { MEDIA_RETRY_EVENT } from './useMediaSrc'
 import { getTabTitle, type TabInfo } from '../components/TabBar'
 import { showToast } from '../utils/tableParser'
 import { ensureMediaNeighbors } from '../extensions/blockNeighbors'
@@ -169,11 +170,25 @@ export function useTabs({
         setSourceText(markdown)
         applyMediaReplacements(replacements)
         setCurrentDocDir(dirOfPath(savedPath))
+        // Reintenta los medios que seguían rotos: si este guardado recreó sus
+        // archivos (p. ej. al reemplazar la imagen), los placeholders desaparecen solos.
+        window.dispatchEvent(new Event(MEDIA_RETRY_EVENT))
       }
       setTabs(prev => prev.map(t =>
         t.id === tab.id ? { ...t, filePath: savedPath, content: markdown, modified: false } : t
       ))
       if (savedPath) addRecent(savedPath)
+      // Verifica contra disco las referencias locales de medios del documento
+      // guardado (activo o en segundo plano): detecta rutas cuyo archivo ya no
+      // existe —p. ej. carpeta <doc>.assets borrada— para que puedan recuperarse
+      // con «Reemplazar» desde el placeholder del editor.
+      const missingMedia = await countMissingLocalMedia(markdown, dirOfPath(savedPath))
+      if (missingMedia > 0) {
+        const docName = savedPath.split(/[/\\]/).pop()
+        showToast(missingMedia === 1
+          ? `1 medio no encontrado en disco ("${docName}"). Usa «Reemplazar» sobre su aviso en el editor.`
+          : `${missingMedia} medios no encontrados en disco ("${docName}"). Usa «Reemplazar» sobre cada aviso en el editor.`)
+      }
       return true
     } catch {
       showToast('Error al guardar el archivo')
