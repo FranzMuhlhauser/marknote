@@ -3890,3 +3890,80 @@ Se reemplazaron `transformPastedHTML` y `transformPastedText` por un único cont
 - Proceso principal y preload (sin handlers ni canales IPC nuevos).
 - Pipeline de materialización (`materializeMedia`, `file:saveAsset`) y formato del `.md`.
 - Comportamiento del drag & drop existente y del pegado de texto/markdown.
+
+---
+
+## P16 — Salida determinista de listas con doble Enter (2026-08-23)
+
+### Estado
+
+✅ **Implementado** (2026-08-23)
+
+### Problema resuelto
+
+Al escribir una lista (numerada o con `-`), presionar Enter dos veces debía salir de la lista. De forma intermitente esto fallaba: el segundo Enter no salía y el editor seguía generando ítems de lista indefinidamente ("doble Enter infinito").
+
+### Causa raíz
+
+La salida de lista no tiene código propio en la app: la manejan dos comandos de ProseMirror.
+
+1. **Primer Enter** → `splitListItem` (nodo `listItem` de StarterKit) crea el ítem vacío siguiente.
+2. **Segundo Enter** (con el ítem ya vacío) → `splitListItem` retorna `false` y el comando base `liftEmptyBlock` es el que "levanta" el ítem fuera de la lista.
+
+`liftEmptyBlock` solo levanta el ítem cuando el párrafo está realmente vacío **y** es el único/último bloque del `listItem` (`$cursor.after() === $cursor.end(-1)`) **y** la lista no está anidada. Si el ítem tiene más de un bloque (un segundo párrafo vacío, una lista anidada vía `Tab`, un `<br>` o un nodo media), `liftEmptyBlock` cae en su rama de `tr.split(...)` o en `splitBlock`, que crean otro bloque/ítem dentro de la lista en lugar de salir. Una vez en ese estado, cada Enter sigue partiendo el ítem → la lista nunca sale. Por eso el fallo es intermitente: depende del estado exacto del ítem en el momento del doble Enter.
+
+### Implementación
+
+Se sobrescribió el atajo `Enter` del nodo `listItem` con lógica determinista, siguiendo el patrón `.extend()` ya usado en `CustomTable` y `TaskItem.extend()`:
+
+```ts
+const CustomListItem = ListItem.extend({
+  addKeyboardShortcuts() {
+    return {
+      ...this.parent?.(),
+      Enter: () => {
+        const { $from, empty } = this.editor.state.selection
+        if (empty && $from.parent.type.name === 'paragraph' && $from.parent.content.size === 0) {
+          return this.editor.commands.liftListItem(this.name)
+        }
+        return this.editor.commands.splitListItem(this.name)
+      }
+    }
+  }
+})
+```
+
+- Cursor en párrafo vacío dentro de un `listItem` → `liftListItem` (sale de la lista; si está anidada, sube un nivel).
+- Caso contrario → `splitListItem` (comportamiento normal de crear un nuevo ítem).
+
+Se conservan `Tab` (`sinkListItem`) y `Shift-Tab` (`liftListItem`) del nodo original vía `...this.parent?.()`. Se deshabilitó el `listItem` que aporta StarterKit (`listItem: false`) y se registró `CustomListItem` en su lugar, para evitar dos nodos con el mismo nombre.
+
+### Archivos modificados
+
+| Archivo | Cambio |
+|---------|--------|
+| `src/renderer/src/extensions/index.ts` | Import de `@tiptap/extension-list-item`, nuevo `CustomListItem` (`ListItem.extend()`), `StarterKit.configure({ listItem: false })` y registro de `CustomListItem`. |
+| `package.json` | Nueva dependencia directa `@tiptap/extension-list-item` (^2.27.2, ya estaba instalada transitivamente vía StarterKit). |
+
+### Decisiones técnicas
+
+| Decisión | Alternativas | Razón |
+|----------|-------------|-------|
+| Sobrescribir `Enter` en un `ListItem.extend()` | `editorProps.handleKeyDown` en App.tsx | `.extend()` mantiene la lógica en la capa de extensiones, consistente con `CustomTable` y `TaskItem.extend()`. El repo ya documenta que `handleKeyDown` agrega acoplamiento. |
+| `liftListItem` para el ítem vacío | Reproducir manualmente el lift con `tr.lift`/`liftTarget` | `liftListItem` es el comando estándar (el mismo que usa `Shift-Tab`) y ya maneja el caso anidado (`liftToOuterList`) vs. no anidado (`liftOutOfList`). |
+| Deshabilitar `listItem` de StarterKit + `CustomListItem` | Extensión separada con `priority` | Deshabilitar y reemplazar evita dos extensiones que definen el mismo nodo `listItem` y deja el comportamiento en un único lugar. |
+| `@tiptap/extension-list-item` como dependencia directa | Importar la transitiva sin declararla | Ya estaba en `node_modules` (vía StarterKit, misma versión 2.27.2): declararla formaliza un import directo sin añadir código externo nuevo. |
+
+### Validaciones realizadas
+
+1. ✅ `npm run typecheck` — sin errores de tipos.
+2. ✅ `npm run build` — compilación exitosa (main + preload + renderer).
+3. ⬜ Manual sugerido: lista `-` y numerada → doble Enter sale de la lista; lista anidada con `Tab` → Enter des-anida un nivel; ítem con dos párrafos vacíos (el caso que antes quedaba "infinito") → sale de la lista.
+
+### Sin cambios en
+
+- `App.tsx`, `hooks/*`, `components/*` — sin cambios.
+- `markdown.ts`, `tableParser.ts`, resto de `extensions/*` — sin cambios.
+- Proceso principal y preload — sin cambios.
+
+

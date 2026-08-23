@@ -5,6 +5,7 @@ import Link from '@tiptap/extension-link'
 import Typography from '@tiptap/extension-typography'
 import TaskList from '@tiptap/extension-task-list'
 import TaskItem from '@tiptap/extension-task-item'
+import ListItem from '@tiptap/extension-list-item'
 import { wrappingInputRule } from '@tiptap/core'
 import Table from '@tiptap/extension-table'
 import { TextSelection } from '@tiptap/pm/state'
@@ -87,13 +88,35 @@ const CustomTable = Table.extend({
   },
 })
 
+// Sobrescribe el Enter del nodo listItem para salir de la lista de forma
+// determinista. El comportamiento por defecto (splitListItem + liftEmptyBlock)
+// solo levanta el ítem cuando el párrafo vacío es el único bloque y la lista no
+// está anidada; en cualquier otro caso se queda generando ítems/bloques sin
+// salir (doble Enter "infinito").
+const CustomListItem = ListItem.extend({
+  addKeyboardShortcuts() {
+    return {
+      ...this.parent?.(),
+      Enter: () => {
+        const { $from, empty } = this.editor.state.selection
+        if (empty && $from.parent.type.name === 'paragraph' && $from.parent.content.size === 0) {
+          return this.editor.commands.liftListItem(this.name)
+        }
+        return this.editor.commands.splitListItem(this.name)
+      }
+    }
+  }
+})
+
 export function getExtensions() {
   return [
     StarterKit.configure({
       heading: { levels: [1, 2, 3, 4, 5, 6] },
       codeBlock: false,
+      listItem: false,
       history: { depth: 100 }
     }),
+    CustomListItem,
     Placeholder.configure({ placeholder: 'Empieza a escribir...' }),
     Underline,
     Link.configure({ openOnClick: false, HTMLAttributes: { class: 'editor-link' } }),
