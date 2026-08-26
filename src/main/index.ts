@@ -140,7 +140,10 @@ autoUpdater.on('update-available', (info) => send('update:status', 'available', 
 autoUpdater.on('update-not-available', () => send('update:status', 'not-available'))
 autoUpdater.on('download-progress', (p) => send('update:status', 'downloading', { percent: p.percent }))
 autoUpdater.on('update-downloaded', (info) => send('update:status', 'downloaded', { version: info.version }))
-autoUpdater.on('error', () => { /* silent in dev */ })
+autoUpdater.on('error', (err) => {
+  console.error('[updater]', err.message)
+  send('update:status', 'error', { message: err.message })
+})
 
 ipcMain.handle('dialog:open', async () => {
   const result = await dialog.showOpenDialog(mainWindow!, {
@@ -442,7 +445,9 @@ app.whenReady().then(() => {
     dispatchOpenFile(pendingFile)
   }
 
-  try { autoUpdater.checkForUpdates() } catch { /* silent */ }
+  try {
+    setTimeout(() => autoUpdater.checkForUpdates(), 3000)
+  } catch { /* silent */ }
 })
 
 app.on('window-all-closed', () => {
