@@ -210,7 +210,7 @@ function preprocessTaskLists(source: string): string {
   const blocks: string[] = []
   let s = source.replace(/(```[\s\S]*?```|`[^`\n]+`)/g, (m) => {
     blocks.push(m)
-    return `\x00CB${blocks.length - 1}\x00`
+    return `\uE000${blocks.length - 1}\uE001`
   })
   s = s.replace(
     /(?:^|\n)((?:[ \t]*[*-] \[[ x]\] .+(?:\n|$))+)/gm,
@@ -245,7 +245,7 @@ function preprocessTaskLists(source: string): string {
       return buildList(0, parsed[0].indent).html
     }
   )
-  s = s.replace(/\x00CB(\d+)\x00/g, (_, i) => blocks[Number(i)])
+  s = s.replace(/\uE000(\d+)\uE001/g, (_, i) => blocks[Number(i)])
   return s
 }
 
@@ -253,7 +253,7 @@ function preprocessMath(source: string): string {
   const blocks: string[] = []
   let s = source.replace(/(```[\s\S]*?```|`[^`\n]+`)/g, (m) => {
     blocks.push(m)
-    return `\x00MP${blocks.length - 1}\x00`
+    return `\uE002${blocks.length - 1}\uE003`
   })
   s = s.replace(/\$\$([\s\S]*?)\$\$/g, (_, tex) => {
     const t = tex.trim().replace(/&/g, '&amp;').replace(/"/g, '&quot;')
@@ -263,7 +263,7 @@ function preprocessMath(source: string): string {
     const t = tex.trim().replace(/&/g, '&amp;').replace(/"/g, '&quot;')
     return `<span data-math-inline data-tex="${t}"></span>`
   })
-  s = s.replace(/\x00MP(\d+)\x00/g, (_, i) => blocks[Number(i)])
+  s = s.replace(/\uE002(\d+)\uE003/g, (_, i) => blocks[Number(i)])
   return s
 }
 
