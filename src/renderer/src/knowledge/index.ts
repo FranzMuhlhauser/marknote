@@ -139,13 +139,13 @@ export const TOPICS: KnowledgeTopic[] = [
     title: 'Enlaces',
     category: 'intermedio',
     summary: 'Los enlaces conectan tu documento con URLs externas o referencias internas.',
-    syntax: ['[texto visible](url)', '[texto](url "Título")', '<url-directa>'],
+    syntax: ['[texto visible](url)', '[texto](url "Título")', '[texto](#encabezado)', '<url-directa>'],
     details: 'El texto entre corchetes se muestra como link. La URL entre paréntesis es el destino. El título opcional aparece como tooltip. Los enlaces directos con <> son útiles para URLs cortas.',
     example: {
       input: '[Marknote](https://marknote.app "Editor Markdown")',
       rendered: 'Un enlace clickeable que dice "Marknote" y al pasar el mouse muestra "Editor Markdown".'
     },
-    tips: ['Usa títulos descriptivos para mejor UX', 'Los enlaces a secciones internas requieren anclas HTML'],
+    tips: ['Usa títulos descriptivos para mejor UX', 'Ctrl + clic abre el enlace en tu navegador', '[ir](#mi-titulo) salta a un encabezado del propio documento'],
     related: ['images']
   },
   {

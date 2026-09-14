@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, dialog, Menu, session } from 'electron'
+import { app, BrowserWindow, ipcMain, dialog, Menu, session, shell } from 'electron'
 import { join, basename, extname, dirname, isAbsolute, resolve } from 'path'
 import { readFile, writeFile, readdir, mkdir, rename, copyFile, unlink, access } from 'fs/promises'
 import { constants as fsConstants } from 'fs'
@@ -10,6 +10,27 @@ let startupFilePath: string | null = null
 
 function send(channel: string, ...args: any[]) {
   mainWindow?.webContents.send(channel, ...args)
+}
+
+// Esquemas que se pueden entregar al SO con shell.openExternal. Se excluyen a
+// propósito file: y los esquemas personalizados: si el renderer llegara a
+// ejecutar código no confiable, no debe poder lanzar manejadores de protocolo
+// arbitrarios registrados en el sistema.
+const EXTERNAL_PROTOCOLS = new Set(['http:', 'https:', 'mailto:'])
+
+// Devuelve true solo si la URL es aceptable y se entregó al SO, para que el
+// renderer pueda avisar cuando el enlace no se puede abrir.
+function openExternalUrl(url: unknown): boolean {
+  if (typeof url !== 'string') return false
+  let parsed: URL
+  try {
+    parsed = new URL(url)
+  } catch {
+    return false
+  }
+  if (!EXTERNAL_PROTOCOLS.has(parsed.protocol)) return false
+  shell.openExternal(parsed.href).catch(err => console.error('[openUrl]', err))
+  return true
 }
 
 function dispatchOpenFile(filePath: string) {
@@ -123,6 +144,19 @@ function createWindow(): void {
 
     const menu = Menu.buildFromTemplate(items)
     menu.popup({ window: mainWindow ?? undefined })
+  })
+
+  // La ventana de la app nunca navega fuera de sí misma: los enlaces externos
+  // se abren en el navegador del sistema (ver app:openUrl). Sin estas guardas,
+  // seguir un <a> dentro del editor reemplazaría la interfaz de Marknote.
+  mainWindow.webContents.setWindowOpenHandler(({ url }) => {
+    openExternalUrl(url)
+    return { action: 'deny' }
+  })
+
+  mainWindow.webContents.on('will-navigate', (event, url) => {
+    // Solo se permite recargar el propio documento (HMR en desarrollo).
+    if (url !== mainWindow?.webContents.getURL()) event.preventDefault()
   })
 
   if (process.env.ELECTRON_RENDERER_URL) {
@@ -394,6 +428,8 @@ ipcMain.handle('app:getStartupFile', () => {
 })
 
 ipcMain.handle('app:getVersion', () => app.getVersion())
+
+ipcMain.handle('app:openUrl', (_event, url: unknown) => openExternalUrl(url))
 
 ipcMain.handle('spellcheck:addWord', (_event, word: string) => {
   session.defaultSession.addWordToSpellCheckerDictionary(word)

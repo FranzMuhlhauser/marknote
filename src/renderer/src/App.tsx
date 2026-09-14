@@ -23,6 +23,7 @@ import { ConfirmDialog } from './components/ConfirmDialog'
 import { mdToHtml, htmlToMd } from './utils/markdown'
 import { parseDelimitedText, insertTableData, showToast } from './utils/tableParser'
 import { readFileAsDataURL, readFileAsText } from './utils/fileUtils'
+import { goToAnchor } from './utils/headingNavigation'
 import { addCustomWord } from './utils/customDictionary'
 import { exportHtml, exportPdf } from './utils/export'
 import { useEditorState } from './hooks/useEditorState'
@@ -229,6 +230,43 @@ function App() {
         clearTimeout(htmlToMdDebounceRef.current)
       }
     }
+  }, [])
+
+  // Los enlaces se abren en el navegador del sistema; las anclas internas
+  // (`#seccion`) navegan dentro del documento. Dentro del editor se exige
+  // Ctrl/Cmd + clic para no robarle el clic simple, que coloca el cursor y
+  // permite editar el texto del enlace (openOnClick: false en extensions). Fuera
+  // del editor (notas de versión, etc.) basta el clic simple, porque ahí no hay
+  // nada que editar.
+  const editorRef = useRef<Editor | null>(null)
+  editorRef.current = editor
+
+  useEffect(() => {
+    function handleClick(event: MouseEvent) {
+      const anchor = (event.target as HTMLElement | null)?.closest?.('a')
+      const href = anchor?.getAttribute('href')
+      if (!anchor || !href) return
+      const inEditor = anchor instanceof HTMLElement && anchor.isContentEditable
+      if (inEditor && !event.ctrlKey && !event.metaKey) return
+      event.preventDefault()
+
+      if (href.startsWith('#')) {
+        const target = editorRef.current
+        if (!target || !goToAnchor(target, href)) {
+          showToast('No se encontró ningún encabezado con ese nombre en el documento.')
+        }
+        return
+      }
+
+      window.api.openUrl(href).then(
+        opened => {
+          if (!opened) showToast('Solo se pueden abrir enlaces http, https o mailto.')
+        },
+        () => {}
+      )
+    }
+    document.addEventListener('click', handleClick, true)
+    return () => document.removeEventListener('click', handleClick, true)
   }, [])
 
   // Wire editor ref to useTabs once editor is created

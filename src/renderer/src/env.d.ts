@@ -30,6 +30,7 @@ interface FileAPI {
   onOpenFile: (callback: (filePath: string) => void) => void
   getStartupFile: () => Promise<string | null>
   getVersion: () => Promise<string>
+  openUrl: (url: string) => Promise<boolean>
   seedPaths: (paths: string[]) => Promise<void>
   addCustomWord: (word: string) => Promise<void>
   removeCustomWord: (word: string) => Promise<void>

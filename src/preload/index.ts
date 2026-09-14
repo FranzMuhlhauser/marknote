@@ -28,6 +28,7 @@ const api = {
   },
   getStartupFile: () => ipcRenderer.invoke('app:getStartupFile'),
   getVersion: () => ipcRenderer.invoke('app:getVersion'),
+  openUrl: (url: string) => ipcRenderer.invoke('app:openUrl', url),
   seedPaths: (paths: string[]) => ipcRenderer.invoke('paths:seed', paths),
   addCustomWord: (word: string) => ipcRenderer.invoke('spellcheck:addWord', word),
   removeCustomWord: (word: string) => ipcRenderer.invoke('spellcheck:removeWord', word),
