@@ -97,41 +97,53 @@ if ($LASTEXITCODE -ne 0) {
 Write-Host " OK" -ForegroundColor Green
 
 # ─── 8. Crear o actualizar Release en GitHub ─────────────────────────
-# Release notes curadas desde el Historial de Versiones de documents/DOCUMENTACION.md.
-# Si no se encuentra la fila de la versión, se cae a --generate-notes.
-Write-Host "[release] Construyendo release notes..." -NoNewline
+# Notas del release:
+#  - si ya existe dist-electron/release-notes-<version>.md, se respetan tal cual
+#    (permite curarlas a mano antes del release);
+#  - si no, se generan desde el Historial de Versiones de documents/DOCUMENTACION.md;
+#  - si tampoco hay fila para la versión, se cae a --generate-notes.
 $notesFile = "$distDir\release-notes-$version.md"
-# Leer con UTF-8 explícito: el archivo es UTF-8 sin BOM y PS 5.1 usaría ANSI.
-$utf8 = New-Object System.Text.UTF8Encoding($false)
-$doc = [System.IO.File]::ReadAllText("$PROJECT_ROOT\documents\DOCUMENTACION.md", [System.Text.Encoding]::UTF8)
-$rows = @($doc -split "`n" | Where-Object { $_ -match "^[ \t]*\|[ \t]*v$([regex]::Escape($version))(\s|\|)" -and $_ -match "\|$" })
-$notesLines = @("# $tag")
+$useNotesFile = $false
 
-if ($rows.Count -gt 0) {
-  foreach ($row in $rows) {
-    $cells = @($row.Trim().Trim('|').Split('|') | ForEach-Object { $_.Trim() })
-    if ($cells.Count -lt 3) { continue }
-    $date = $cells[1]
-    $changes = ($cells[2..($cells.Count - 1)] -join '|').Trim()
-    $notesLines += ""
-    $notesLines += "Fecha: $date"
-    $notesLines += ""
-    $notesLines += ($changes.Split('·') | ForEach-Object {
-      $item = $_.Trim()
-      if ($item.Length -gt 0) { "- $item" }
-    })
-  }
-  [System.IO.File]::WriteAllLines($notesFile, $notesLines, $utf8)
-  Write-Host " OK" -ForegroundColor Green
-  Write-Host "[release] Notas: $notesFile" -ForegroundColor Green
+if (Test-Path $notesFile) {
+  Write-Host "[release] Notas ya preparadas, se respetan: $notesFile" -ForegroundColor Green
+  $useNotesFile = $true
 } else {
-  Write-Host " no hay fila para $tag en DOCUMENTACION.md" -ForegroundColor Yellow
-  Write-Host "[release] Usando --generate-notes como respaldo."
+  Write-Host "[release] Construyendo release notes..." -NoNewline
+  # Leer con UTF-8 explícito: el archivo es UTF-8 sin BOM y PS 5.1 usaría ANSI.
+  $utf8 = New-Object System.Text.UTF8Encoding($false)
+  $doc = [System.IO.File]::ReadAllText("$PROJECT_ROOT\documents\DOCUMENTACION.md", [System.Text.Encoding]::UTF8)
+  $rows = @($doc -split "`n" | Where-Object { $_ -match "^[ \t]*\|[ \t]*v$([regex]::Escape($version))(\s|\|)" -and $_ -match "\|$" })
+
+  if ($rows.Count -gt 0) {
+    $notesLines = @("# $tag")
+
+    foreach ($row in $rows) {
+      $cells = @($row.Trim().Trim('|').Split('|') | ForEach-Object { $_.Trim() })
+      if ($cells.Count -lt 3) { continue }
+      $date = $cells[1]
+      $changes = ($cells[2..($cells.Count - 1)] -join '|').Trim()
+      $notesLines += ""
+      $notesLines += "Fecha: $date"
+      $notesLines += ""
+      $notesLines += ($changes.Split('·') | ForEach-Object {
+        $item = $_.Trim()
+        if ($item.Length -gt 0) { "- $item" }
+      })
+    }
+    [System.IO.File]::WriteAllLines($notesFile, $notesLines, $utf8)
+    $useNotesFile = $true
+    Write-Host " OK" -ForegroundColor Green
+    Write-Host "[release] Notas: $notesFile" -ForegroundColor Green
+  } else {
+    Write-Host " no hay fila para $tag en DOCUMENTACION.md" -ForegroundColor Yellow
+    Write-Host "[release] Usando --generate-notes como respaldo."
+  }
 }
 
 Write-Host "[release] Creando release..." -NoNewline
 $releaseArgs = @("release", "create", $tag, "--title", $tag)
-if ($rows.Count -gt 0) {
+if ($useNotesFile) {
   $releaseArgs += "--notes-file", $notesFile
 } else {
   $releaseArgs += "--generate-notes"
