@@ -172,6 +172,18 @@ Inspirado en Typora · Construido con Electron + React + TypeScript
 
 Descarga el `.exe` desde [Releases](https://github.com/FranzMuhlhauser/marknote/releases) y ejecuta el instalador.
 
+### Desde el paquete (Linux)
+
+Descarga el `.deb` desde [Releases](https://github.com/FranzMuhlhauser/marknote/releases) e instálalo:
+
+```bash
+dpkg -i marknote_<versión>_amd64.deb
+# si faltan dependencias:
+sudo apt-get install -f
+```
+
+También está disponible como AppImage: dale permisos de ejecución (`chmod +x`) y ábrelo directamente.
+
 ### Desde el código fuente
 
 ```bash
@@ -200,9 +212,14 @@ npm run build
 
 # Empaquetar para Windows
 npm run package:win
+
+# Empaquetar para Linux (.deb + AppImage)
+npm run package:linux
 ```
 
 El comando `package:win` genera un instalador NSIS en `dist-electron/`.
+
+El comando `package:linux` genera `marknote_<versión>_amd64.deb` y `Marknote-<versión>.AppImage` en `dist-electron/` (sólo puede ejecutarse en Linux).
 
 ## Atajos de Teclado
 
