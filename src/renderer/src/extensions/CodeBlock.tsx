@@ -53,8 +53,10 @@ function CodeBlockComponent({ node, updateAttributes, extension }: any) {
 
   const lines: string[] = node.textContent.split('\n')
 
+  // spellCheck={false}: el corrector no debe marcar el código (p. ej. SQL
+  // se subrayaba en rojo en Linux cuando el diccionario `es` está activo).
   return (
-    <NodeViewWrapper className={`code-block-wrapper ${collapsed ? 'collapsed' : ''}`}>
+    <NodeViewWrapper className={`code-block-wrapper ${collapsed ? 'collapsed' : ''}`} spellCheck={false}>
       <div className="code-block-header">
         <div className="code-block-lang-area">
           <select

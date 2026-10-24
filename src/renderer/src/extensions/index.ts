@@ -112,6 +112,9 @@ export function getExtensions() {
   return [
     StarterKit.configure({
       heading: { levels: [1, 2, 3, 4, 5, 6] },
+      // El corrector ortográfico no debe marcar el código inline (p. ej. `COUNT`
+      // se subraya en rojo en Linux cuando el diccionario `es` está activo).
+      code: { HTMLAttributes: { spellcheck: 'false' } },
       codeBlock: false,
       listItem: false,
       history: { depth: 100 }
@@ -141,7 +144,7 @@ export function getExtensions() {
     TableHeader.extend(withCellAlign()),
     Highlight,
     TextAlign.configure({ types: ['heading', 'paragraph'] }),
-    CodeBlock.configure({ lowlight }),
+    CodeBlock.configure({ lowlight, HTMLAttributes: { spellcheck: 'false' } }),
     ResizableImage,
     MathInline,
     MathBlock,
