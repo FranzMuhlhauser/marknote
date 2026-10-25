@@ -28,7 +28,12 @@ function parseChangelog(raw: string, version: string): ChangelogEntry | null {
     if (cells.length < 4) continue
     if (cells[0] !== '' || !cells[1].startsWith('v' + version)) continue
     date = cells[2]
-    items.push(...cells.slice(3).join('|').split('·').map(s => s.trim()).filter(Boolean))
+    // La fila termina en '|', así que el último elemento de cells es siempre
+    // una cadena vacía: sin descartarlo, el último ítem del changelog acaba
+    // con una barra suelta.
+    const changeCells = cells.slice(3)
+    if (changeCells[changeCells.length - 1] === '') changeCells.pop()
+    items.push(...changeCells.join('|').split('·').map(s => s.trim()).filter(Boolean))
   }
 
   if (items.length === 0) return null

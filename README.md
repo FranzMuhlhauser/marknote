@@ -269,7 +269,14 @@ El comando `package:linux` genera `marknote_<versión>_amd64.deb` y `Marknote-<v
 - [ ] Plugins: sistema de extensiones
 - [ ] Temas comunitarios
 
-> **Windows**: al abrir el instalador, SmartScreen muestra "Windows protegió tu PC" con un botón azul "Más información" → "Ejecutar de todas formas". Es un clic extra, no bloquea la instalación.
+> **Windows — aviso de SmartScreen (falso positivo)**: el instalador no está firmado con un
+> certificado de code signing (es de pago), así que SmartScreen muestra "Windows protegió tu PC"
+> y algunos antivirus pueden marcarlo como sospechoso. **Es un falso positivo.** Para instalar:
+> pulsa el botón azul "Más información" → "Ejecutar de todas formas". No bloquea la instalación.
+>
+> **Linux**: el paquete `.deb` y el AppImage **no** están firmados; instálalos sólo desde
+> [Releases](https://github.com/FranzMuhlhauser/marknote/releases) y verifica el `sha256` si
+> quieres comprobar la integridad.
 
 * * *
 

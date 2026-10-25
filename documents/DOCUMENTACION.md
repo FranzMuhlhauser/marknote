@@ -30,7 +30,9 @@ Construido con Electron + Vite + React 19 + TypeScript + TipTap.
 
 - Node.js v24.16.0+
 - npm 11.13.0+
-- Windows 11 (para empaquetar)
+- Windows 11 para empaquetar el instalador NSIS
+- Linux (Debian/Ubuntu/Mint) para empaquetar `.deb` y `.AppImage` — electron-builder
+  no puede generar esos formatos desde Windows
 
 ---
 
@@ -41,7 +43,10 @@ npm run dev           # Entorno de desarrollo con hot reload
 npm run build         # Compila todo (main + preload + renderer)
 npm run package       # Compila + empaqueta para el SO actual
 npm run package:win   # Compila + empaqueta para Windows (NSIS installer)
+npm run package:linux # Compila + empaqueta para Linux (.deb + AppImage)
 npm run typecheck     # npx tsc --noEmit (verificación de tipos)
+npm run lint          # ESLint (typescript-eslint + reglas de React Hooks)
+npm test              # Vitest: ida y vuelta de Markdown y corrector ortográfico
 ```
 
 ---
@@ -453,6 +458,38 @@ El instalador incluye:
 
 ---
 
+## Empaquetado para Linux
+
+```bash
+npm run package:linux
+```
+
+Genera en `dist-electron/`:
+- `marknote_<version>_amd64.deb` — paquete Debian (~121 MB), se instala en `/opt/Marknote`
+- `Marknote-<version>.AppImage` — portable, sin instalación (~157 MB)
+- `latest-linux.yml` — manifiesto del auto-updater para Linux (**debe subirse al release**)
+
+Configuración en `electron-builder.yml`:
+
+```yaml
+linux:
+  icon: resources/icon.png
+  syncDesktopName: true
+  maintainer: FranzMuhlhauser <franz.muhlhauser@gmail.com>
+  target:
+    - { target: deb, arch: [x64] }
+    - { target: appimage, arch: [x64] }
+```
+
+Detalles que electron-builder exige y que no son obvios:
+
+- `maintainer` con email (o `author` como objeto con email en `package.json`); sin él el build aborta.
+- `homepage` (o `repository`) en `package.json`: el target `fpm` lo necesita para el campo `Homepage` del paquete.
+- `desktopName` en `package.json` + `linux.syncDesktopName: true`: hace que el `.desktop` se llame igual que el `app_id` de Electron y que `StartupWMClass` coincida, para que el lanzador asocie la ventana abierta con su entrada del menú.
+- El `node_modules` debe instalarse en la plataforma destino: si viene de Windows faltan los binarios nativos (`@rollup/rollup-linux-x64-gnu`, `@esbuild/linux-x64`) y `electron-vite build` falla. Solución: `npm ci` en Linux.
+
+---
+
 ## Release en GitHub
 
 Para crear un nuevo Release:
@@ -465,13 +502,36 @@ Para crear un nuevo Release:
 
 El script `scripts/release.ps1` automatiza los pasos 4-5. Requiere `gh` CLI autenticado y working tree limpio (o `-Force`).
 
+### Release automático (GitHub Actions)
+
+`.github/workflows/release.yml` se dispara al empujar un tag `vX.Y.Z`:
+
+1. Verifica que el tag coincida con `version` de `package.json` (evita publicar binarios mal numerados).
+2. Crea el release del tag si no existe.
+3. En paralelo, en runners nativos: `windows-latest` ejecuta `package:win` y `ubuntu-latest`
+   ejecuta `package:linux`, ambos con `--publish never` (la subida la hace `gh` para
+   controlar exactamente qué se adjunta).
+4. Cada job pasa `typecheck`, `lint` y `test` antes de empaquetar.
+5. Sube los assets con `gh release upload --clobber`: `Setup.exe`, su `.blockmap`,
+   `.deb`, `.AppImage`, `latest.yml` y `latest-linux.yml`.
+
+Los dos manifiestos son imprescindibles: sin `latest.yml` los clientes Windows no ven
+actualizaciones y sin `latest-linux.yml` los de Linux reciben un 404 silencioso.
+
+### Aviso de SmartScreen (Windows)
+
+El instalador no está firmado con un certificado de code signing (es de pago), así que
+Windows SmartScreen muestra «Windows protegió tu PC» y algunos antivirus pueden marcarlo.
+Es un **falso positivo** habitual en instaladores NSIS sin firma. El release incluye una
+nota explicando que hay que pulsar «Más información» → «Ejecutar de todas formas».
+
 ---
 
 ## Historial de Versiones
 
 | Versión | Fecha | Cambios |
 |---|---|---|
-| v1.0.3 | 2026-09-14 | **Nuevo**: 🔗 Enlaces internos — escribe `[ir](#mi-titulo)` y el enlace salta a ese encabezado dentro del documento, con un resaltado momentáneo; sirve cualquier variante razonable del nombre (`#Mi Título`, `#introduccion` o `#introducción`) · **Mejoras**: 🛡️ La ventana de Marknote queda protegida — un enlace ya no puede reemplazar la interfaz de la app por una página web externa, y solo se entregan al sistema direcciones web (`http`, `https`) o de correo (`mailto`) · **Correcciones**: 🔗 Los enlaces ya abren — `Ctrl + clic` (`Cmd + clic` en Mac) sobre un enlace de tu documento lo abre en tu navegador; antes no ocurría nada. El clic simple sigue colocando el cursor para editar el texto del enlace · 🔗 Enlaces en las notas de versión — los enlaces de la ventana de Novedades también abren, con un clic simple · 💬 Aviso si un enlace no se puede abrir — si la dirección no es web ni de correo, la app te lo dice en vez de no hacer nada |
+| v1.0.3 | 2026-09-14 | **Nuevo**: 🐧 Versión Linux — instalador `.deb` y AppImage para Ubuntu/Mint/Debian, con auto-actualización propia; ⚠️ El instalador de Windows no está firmado: SmartScreen muestra un aviso que es un falso positivo («Más información» → «Ejecutar de todas formas») · 🔗 Enlaces internos — escribe `[ir](#mi-titulo)` y el enlace salta a ese encabezado dentro del documento, con un resaltado momentáneo; sirve cualquier variante razonable del nombre (`#Mi Título`, `#introduccion` o `#introducción`) · **Mejoras**: 🛡️ La ventana de Marknote queda protegida — un enlace ya no puede reemplazar la interfaz de la app por una página web externa, y solo se entregan al sistema direcciones web (`http`, `https`) o de correo (`mailto`) · **Correcciones**: 🔗 Los enlaces ya abren — `Ctrl + clic` (`Cmd + clic` en Mac) sobre un enlace de tu documento lo abre en tu navegador; antes no ocurría nada. El clic simple sigue colocando el cursor para editar el texto del enlace · 🔗 Enlaces en las notas de versión — los enlaces de la ventana de Novedades también abren, con un clic simple · 💬 Aviso si un enlace no se puede abrir — si la dirección no es web ni de correo, la app te lo dice en vez de no hacer nada · ⌨️ El corrector ortográfico ya no subraya el código — el contenido de `código` inline y de los bloques (p. ej. `COUNT`, `INNER JOIN`) deja de marcarse en rojo; afectaba sobre todo en Linux, donde el diccionario español está activo · 💾 Los documentos con código dentro de listas de tareas ya no se corrompen al guardar — las barras invertidas dejaban de acumularse en cada guardado · 🔤 Los documentos guardados terminan siempre con salto de línea |
 | v1.0.2 | 2026-08-28 | **Corrección**: 🔧 Código inline corrupto — al abrir archivos Markdown con código inline (palabras entre comillas invertidas como `código`), los placeholders internos de los preprocesadores se filtraban al editor mostrando caracteres extraños como `CB9`. Causa: los null bytes (`\x00`) usados como marcadores temporales se corrompían durante el procesamiento de markdown-it. Solución: reemplazar null bytes por caracteres Unicode del área de uso privado (`\uE000`–`\uE003`) que sobreviven al pipeline completo de preprocesamiento |
 | v1.0.1 | 2026-08-23 | **Nuevo**: 📷 Recuperación de fotos y videos — si el archivo de una imagen o video se pierde (por ejemplo, si borras la carpeta de recursos de tu nota), ya no queda roto para siempre: se muestra un aviso con «Reemplazar…» y «Reintentar», y al guardar la app te avisa si algo sigue faltando · 📋 Pegar imágenes directo — ahora puedes pegar capturas de pantalla o imágenes copiadas desde el Explorador de Windows · **Correcciones**: 🔢 Salida de las listas — al escribir una lista (numerada o con viñetas), presionar Enter dos veces ahora sale siempre de la lista; antes, a veces, seguía creando elementos sin fin |
 | v1.0.0 | 2026-08-13 | **Nuevo**: 📷 Fotos y videos en tus documentos — agrega fotos y videos con los botones 🖼️ y 🎬 de la barra superior: elige un archivo desde tu computadora o pega un enlace (por ejemplo, de YouTube) · 🎉 Novedades de la versión — cada vez que la app se actualice, se abrirá una ventana contándote qué hay de nuevo, qué mejoró y qué errores se corrigieron; puedes volver a verla en el menú Ayuda → Novedades de esta versión · 💡 Aviso para salir de las tablas — cuando escribes dentro de una tabla, aparece una pequeña nota flotante que te recuerda cómo salir: presionar Shift+Tab · **Mejoras**: 🗂️ Tus imágenes ya no se pierden — las fotos y videos que agregas se guardan en una carpeta junto a tu documento (por ejemplo, `mi-nota.assets`); si llevas el documento a otra computadora, las imágenes van con él · ⊞ El botón de tablas te sigue — el botón ⊞ (el que abre las opciones de la tabla) se mantiene siempre junto a tu tabla, aunque te desplaces por el documento · **Correcciones**: 💾 Guardar ya no pregunta de más — cuando guardas un documento y sigues escribiendo, al presionar Ctrl+S se actualiza el mismo archivo; antes volvía a preguntar dónde guardar, como si fuera un documento nuevo cada vez · 🖼️ Imágenes escritas a mano — ahora puedes insertar una imagen escribiendo tú mismo el formato Markdown `![nombre](ruta-de-la-imagen)` y aparecerá correctamente · ⊞ El botón correcto en la tabla correcta — si tenías varias tablas, el botón ⊞ aparecía siempre en la primera del documento; ahora aparece en la tabla que realmente estás usando |
@@ -3975,3 +4035,188 @@ Se conservan `Tab` (`sinkListItem`) y `Shift-Tab` (`liftListItem`) del nodo orig
 - Proceso principal y preload — sin cambios.
 
 
+
+## P17 — Soporte Linux, corrector ortográfico y corrupción al guardar (2026-10-24)
+
+### Estado
+
+✅ Completado y publicado. Los binarios Linux (`.deb` y `.AppImage`) están en el
+release `v1.0.3` y la infraestructura de build/test/release quedó automatizada.
+
+### Contexto
+
+Marknote se empaquetaba sólo para Windows. Al usarlo en Linux aparecieron dos bugs
+que resultaron ser independientes entre sí, más una carencia de infraestructura
+(no había ni un test, ni CI, ni lint).
+
+### Problemas resueltos
+
+| # | Problema | Alcance |
+|---|---|---|
+| 1 | No existía paquete Linux | Nuevo |
+| 2 | El corrector ortográfico subrayaba el código (inline y bloques) | Bug visible sólo en Linux |
+| 3 | Los task items con código se corrompían en cada guardado | Bug de pérdida de datos |
+| 4 | El auto-update de Linux devolvía 404 (`latest-linux.yml` ausente) | Bug silencioso |
+| 5 | `UnhandledPromiseRejectionWarning` al comprobar actualizaciones sin red | Ruido / robustez |
+| 6 | Sin tests, sin CI, sin lint | Infraestructura |
+| 7 | `sandbox: false` en el renderer | Endurecimiento |
+| 8 | Los `.md` se guardaban sin salto de línea final | Cosmético (diffs) |
+| 9 | `desktopName` sin definir: el lanzador podía no asociar la ventana | Cosmético (Linux) |
+
+### Causa raíz
+
+**#2 — Corrector subrayando código.** El editor fuerza `spellcheck: 'true'` y `lang: 'es'`,
+y la marca `code` de TipTap renderiza un `<code>` sin `spellcheck="false"`; Chromium sí
+revisa ortografía dentro de `<code>` en un `contenteditable`. En Windows el diccionario
+español no estaba activo (no se veía nada); en Linux sí, así que marcaba `COUNT`, `SUM`,
+`INNER JOIN`… Por eso el bug «sólo pasaba en Linux»: mismo código, distinto estado del
+diccionario (Hunspell se descarga y cachea por perfil).
+
+Hallazgo adicional: los bloques de código usan un `ReactNodeViewRenderer` propio, que
+**ignora** `HTMLAttributes`; por eso el `<pre>` seguía sin el atributo hasta añadir
+`spellCheck={false}` en el `NodeViewWrapper`.
+
+**#3 — Corrupción al guardar.** `preprocessTaskLists` protege los `spans` de código con
+placeholders, genera el HTML de la checklist y después restauraba los placeholders como
+**markdown crudo** (``` `DROP` ```) dentro del `<ul data-type="taskList">`. Ese HTML lo
+procesa `md.render()` como bloque HTML, que por especificación CommonMark pasa **en crudo**:
+el markdown restaurado nunca se parsea, así que quedaba como texto literal con backticks
+visibles y sin marca de código. Al guardar, turndown escapa los backticks (`` \` ``), y en
+el siguiente ciclo markdown-it consume las barras de a pares y reinterpreta el resto. De
+ahí la firma del bug: `DROP` → `` \`DROP\` `` → `` \\\`DROP\\\` `` … barras impares y crecientes
+en cada guardado. Sólo afectaba a líneas `- [ ]` porque sólo ellas pasan por ese preprocesador.
+
+**#4 — Auto-update Linux.** `electron-updater` en Linux lee `latest-linux.yml` del release.
+Se generaba en `dist-electron/` pero no se subía, así que la comprobación devolvía
+`Cannot find latest-linux.yml in the latest release artifacts … HttpError: 404` y la app
+nunca avisaba de versiones nuevas (fallo silencioso para el usuario).
+
+**#5 — Rechazo sin manejar.** `autoUpdater.checkForUpdates()` devuelve una promesa que
+rechaza si no hay red o si la API de GitHub limita las peticiones. Estaba envuelta en un
+`try/catch` síncrono que no cubre el rechazo asíncrono, así que Node emitía
+`UnhandledPromiseRejectionWarning` en cada arranque sin conexión.
+
+### Implementación
+
+**Empaquetado Linux** (`electron-builder.yml`, `package.json`)
+
+- Bloque `linux` con targets `deb` + `appimage` (x64), icono PNG y `category: Office`.
+- `maintainer` con email y `homepage` en `package.json`: los exige el target `fpm`
+  (sin ellos el build aborta con «It is required to set Linux .deb package maintainer»
+  y «Please specify project homepage»).
+- `desktopName: marknote.desktop` + `linux.syncDesktopName: true`.
+- `resources/icon.png` añadido a `files`: `src/main/index.ts` lo referencia para el icono
+  de la ventana y antes no viajaba dentro del paquete.
+- Script `package:linux`.
+
+**Corrector ortográfico** (`extensions/index.ts`, `extensions/CodeBlock.tsx`)
+
+- `StarterKit.configure({ code: { HTMLAttributes: { spellcheck: 'false' } } })`.
+- `CodeBlock.configure({ lowlight, HTMLAttributes: { spellcheck: 'false' } })`.
+- `spellCheck={false}` en el `NodeViewWrapper` del bloque (el NodeView ignora los
+  `HTMLAttributes` de la configuración).
+
+**Corrupción al guardar** (`utils/markdown.ts`)
+
+- Los placeholders se restauran según su tipo: el código inline (una línea) como **HTML ya
+  renderizado** (`md.renderInline`), y los fences multilínea **en crudo** (se comprobó que
+  `renderInline` colapsa un fence real en un `<code>` inline y lo destruiría).
+
+**Robustez del updater** (`main/index.ts`)
+
+- `.catch()` en `checkForUpdates()` con log.
+- Los handlers `update:startDownload` / `update:install` devuelven `{ ok, error }` en vez de
+  propagar el rechazo.
+
+**Endurecimiento y detalles**
+
+- `sandbox: true` en `webPreferences` (el preload sólo usa `contextBridge` + `ipcRenderer`).
+- `normalizeMd()` en los handlers de escritura: garantiza el `\n` final sin tocar el estado
+  del editor ni la detección de cambios.
+- `desktopName` + `syncDesktopName` (ver arriba).
+
+**Tests e infraestructura**
+
+- `vitest.config.ts` con entorno `jsdom` (DOMPurify necesita DOM).
+- `src/renderer/src/utils/__tests__/markdown.test.ts` — 15 tests: render de code, task lists,
+  fences, saneado, y estabilidad de la ida y vuelta `md → html → md` en 7 casos.
+- `src/renderer/src/extensions/__tests__/spellcheck.test.ts` — 2 tests que leen la
+  configuración real de `getExtensions()` y comprueban el `renderHTML` de la marca y del bloque.
+- `eslint.config.js` (flat config) con `@eslint/js`, `typescript-eslint` y
+  `eslint-plugin-react-hooks`; script `lint`.
+- `.github/workflows/release.yml` — CI de release multiplataforma.
+
+### Archivos modificados
+
+- `electron-builder.yml` — bloque `linux`, `syncDesktopName`, `resources/icon.png` en `files`.
+- `package.json` — `homepage`, `desktopName`, scripts `package:linux`, `test`, `test:watch`, `lint`,
+  devDependencies (`vitest`, `jsdom`, `eslint`, `@eslint/js`, `typescript-eslint`,
+  `eslint-plugin-react-hooks`).
+- `src/main/index.ts` — `sandbox: true`, catch del updater, `normalizeMd`.
+- `src/renderer/src/utils/markdown.ts` — restauración de placeholders.
+- `src/renderer/src/extensions/index.ts` — `code` y `codeBlock` con `spellcheck: false`.
+- `src/renderer/src/extensions/CodeBlock.tsx` — `spellCheck={false}` en el NodeView.
+- `src/renderer/src/components/*`, `src/renderer/src/extensions/*`, `src/renderer/src/hooks/*`
+  — deuda de lint (imports/variables muertas, `prefer-const`, catch vacíos).
+- `README.md` — comandos de build Linux, test/lint, sección de instalación Linux y CI.
+- `documents/DOCUMENTACION.md` — este documento.
+
+### Archivos nuevos
+
+- `.github/workflows/release.yml`
+- `eslint.config.js`
+- `vitest.config.ts`
+- `src/renderer/src/utils/__tests__/markdown.test.ts`
+- `src/renderer/src/extensions/__tests__/spellcheck.test.ts`
+
+### Validaciones realizadas
+
+1. ✅ `npm run typecheck` — sin errores (main + renderer).
+2. ✅ `npm run lint` — 0 errores (quedan 20 *warnings* de `react-hooks/exhaustive-deps`).
+3. ✅ `npm test` — 17/17 tests verdes.
+4. ✅ **Los tests detectan el bug**: con el `markdown.ts` anterior al fix fallan 4 tests
+   (incluido el de acumulación de barras); con el fix pasan.
+5. ✅ `npm run build` + `electron-builder --linux` — exit 0; `.deb` (121 MB) y `.AppImage` (157 MB).
+6. ✅ `dpkg-deb -I` — `Package: marknote`, `Version: 1.0.3`, `Maintainer`, `Homepage`,
+   `Depends` y `Architecture: amd64` correctos.
+7. ✅ `.desktop` dentro del `.deb`: `Name`, `Exec`, `Icon` y `StartupWMClass=marknote`.
+8. ✅ App real ejecutada (CDP): `<code spellcheck="false">COUNT</code>` y
+   `.code-block-wrapper[spellcheck="false"]` en el DOM.
+9. ✅ Con `sandbox: true`: `window.api` con 30 métodos, `window.require` **undefined** e IPC
+   funcionando (`getVersion()` → `1.0.3`).
+10. ✅ Guardado real (Ctrl+S por CDP): el archivo termina en `0a` y el resto del contenido es
+    idéntico; 3 guardados seguidos sin acumular barras.
+11. ✅ Auto-update Linux: desaparece el 404 de `latest-linux.yml` y no aparece ningún
+    `UnhandledPromiseRejectionWarning`.
+12. ✅ Release `v1.0.3` con 6 assets; `curl -sSI` a las URLs de descarga responde 302 al CDN.
+13. ✅ `latest-linux.yml` verificado contra el `sha512` y el tamaño reales del AppImage subido.
+
+### Decisiones técnicas
+
+| Decisión | Alternativa | Por qué |
+|---|---|---|
+| `spellCheck={false}` en el `NodeViewWrapper` | Confiar en `HTMLAttributes` de la configuración | El NodeView React sustituye el `renderHTML` de ProseMirror: sin el atributo en el componente, el `<pre>` nunca lo recibe. Se comprobó en el DOM real. |
+| Restaurar inline como `renderInline`, fences en crudo | Restaurar todo con `renderInline` | `renderInline` convierte un fence multilínea en un `<code>` de una sola línea y lo destruiría. |
+| Normalizar el `\n` en el proceso principal | Hacerlo en `htmlToMd` | En el renderer, cambiar el texto serializado puede marcar el documento como modificado al abrirlo. El proceso principal es el único punto que escribe el archivo. |
+| `sandbox: true` | Dejarlo en `false` | El preload sólo usa APIs compatibles con sandbox; el renderer deja de tener acceso a Node sin perder funcionalidad. |
+| CI con `gh release upload` y `--publish never` | Dejar que electron-builder publique | Permite elegir exactamente qué assets suben (incluidos los manifiestos del updater) y evita publicaciones duplicadas. |
+| Un solo job que crea el release y dos de build | Que cada plataforma cree su release | Evita carreras entre jobs y releases duplicados. |
+| Tests de integración sobre `markdown.ts` | Tests de UI/E2E automatizados | Los dos bugs vivían en la capa de conversión Markdown: es donde más barato y estable es cubrirlos. |
+
+### Limitaciones conocidas
+
+- **Windows sin firma de código**: SmartScreen muestra «Windows protegió tu PC» y algunos
+  antivirus marcan el instalador. Es un falso positivo hasta que se compre un certificado
+  de code signing. El release incluye una nota con el paso a seguir.
+- El workflow `release.yml` no se ha podido ejecutar desde el entorno de desarrollo (se
+  estrena con el próximo tag `v*`); el YAML se validó con un parser y la matrix se revisó.
+- Quedan 20 *warnings* de `react-hooks/exhaustive-deps` en `useTabs.ts` y `App.tsx`: son
+  avisos legítimos sobre dependencias de hooks que merecen su propia revisión, porque
+  cambiarlas puede alterar comportamiento.
+- No hay tests de UI automatizados: la verificación funcional (DOM, guardado, sandbox, IPC)
+  se hizo por CDP contra el binario empaquetado.
+
+### Sin cambios en
+
+- Lógica de negocio del editor (TipTap), tablas, imágenes, matemáticas y diagramas.
+- Proceso de firmado/actualización de Windows (`scripts/release.ps1` sigue funcionando igual).
