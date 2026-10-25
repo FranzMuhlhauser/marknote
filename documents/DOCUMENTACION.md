@@ -556,6 +556,7 @@ poder autoactualizarse. Se exige además que `execPath` viva dentro de `APPDIR`.
 
 | Versión | Fecha | Cambios |
 |---|---|---|
+| v1.0.5 | 2026-10-25 | **Nuevo**: 🔔 Aviso de versión nueva para quien instala por `.deb` — como ese formato no puede actualizarse solo, al abrir la app aparece «⬇ Descargar X.Y.Z» en la barra cuando hay una versión más nueva, y el clic abre la descarga del `.deb` en el navegador. Windows y el AppImage siguen actualizándose solos · 🧷 Detección fiable de AppImage — la app ya no cree estar en un AppImage solo porque otra aplicación empaquetada así exporte la variable al lanzarla desde su terminal |
 | v1.0.4 | 2026-10-25 | **Correcciones**: 🐧 Linux: el corrector ortográfico ya no subraya el código (`CREATE TABLE` dentro de comillas invertidas se mostraba como error) · 💾 Guardar en Linux ya no corrompe el documento cuando un ítem de tarea contiene código: cada guardado sumaba barras invertidas hasta romper el texto · 🧩 Los documentos terminan con salto de línea, como exige el estándar Markdown · 🔄 Auto-actualización en Linux: la app encuentra el manifiesto `latest-linux.yml` y deja de fallar con un error 404 al arrancar · 🪟 Windows y 🐧 Linux: los instaladores de esta versión se compilan en GitHub Actions, así que ambos llevan las mismas correcciones · **Mejoras**: ⚙️ Los binarios de ambas plataformas se publican automáticamente al etiquetar una versión, con verificación de tipos, lint y tests antes de subirlos |
 | v1.0.3 | 2026-09-14 | **Nuevo**: 🐧 Versión Linux — instalador `.deb` y AppImage para Ubuntu/Mint/Debian, con auto-actualización propia; ⚠️ El instalador de Windows no está firmado: SmartScreen muestra un aviso que es un falso positivo («Más información» → «Ejecutar de todas formas») · 🔗 Enlaces internos — escribe `[ir](#mi-titulo)` y el enlace salta a ese encabezado dentro del documento, con un resaltado momentáneo; sirve cualquier variante razonable del nombre (`#Mi Título`, `#introduccion` o `#introducción`) · **Mejoras**: 🛡️ La ventana de Marknote queda protegida — un enlace ya no puede reemplazar la interfaz de la app por una página web externa, y solo se entregan al sistema direcciones web (`http`, `https`) o de correo (`mailto`) · **Correcciones**: 🔗 Los enlaces ya abren — `Ctrl + clic` (`Cmd + clic` en Mac) sobre un enlace de tu documento lo abre en tu navegador; antes no ocurría nada. El clic simple sigue colocando el cursor para editar el texto del enlace · 🔗 Enlaces en las notas de versión — los enlaces de la ventana de Novedades también abren, con un clic simple · 💬 Aviso si un enlace no se puede abrir — si la dirección no es web ni de correo, la app te lo dice en vez de no hacer nada · ⌨️ El corrector ortográfico ya no subraya el código — el contenido de `código` inline y de los bloques (p. ej. `COUNT`, `INNER JOIN`) deja de marcarse en rojo; afectaba sobre todo en Linux, donde el diccionario español está activo · 💾 Los documentos con código dentro de listas de tareas ya no se corrompen al guardar — las barras invertidas dejaban de acumularse en cada guardado · 🔤 Los documentos guardados terminan siempre con salto de línea |
 | v1.0.2 | 2026-08-28 | **Corrección**: 🔧 Código inline corrupto — al abrir archivos Markdown con código inline (palabras entre comillas invertidas como `código`), los placeholders internos de los preprocesadores se filtraban al editor mostrando caracteres extraños como `CB9`. Causa: los null bytes (`\x00`) usados como marcadores temporales se corrompían durante el procesamiento de markdown-it. Solución: reemplazar null bytes por caracteres Unicode del área de uso privado (`\uE000`–`\uE003`) que sobreviven al pipeline completo de preprocesamiento |
@@ -4234,8 +4235,9 @@ rechaza si no hay red o si la API de GitHub limita las peticiones. Estaba envuel
 - **Windows sin firma de código**: SmartScreen muestra «Windows protegió tu PC» y algunos
   antivirus marcan el instalador. Es un falso positivo hasta que se compre un certificado
   de code signing. El release incluye una nota con el paso a seguir.
-- El workflow `release.yml` no se ha podido ejecutar desde el entorno de desarrollo (se
-  estrena con el próximo tag `v*`); el YAML se validó con un parser y la matrix se revisó.
+- El workflow `release.yml` no se pudo ejecutar desde el entorno de desarrollo en su momento
+  (se estrenó con el tag `v1.0.4`); el YAML se validó con un parser y la matrix se revisó.
+  *Actualizado en P18: ya se ejecutó en verde con `v1.0.4` y `v1.0.5`.*
 - Quedan 20 *warnings* de `react-hooks/exhaustive-deps` en `useTabs.ts` y `App.tsx`: son
   avisos legítimos sobre dependencias de hooks que merecen su propia revisión, porque
   cambiarlas puede alterar comportamiento.
@@ -4246,3 +4248,132 @@ rechaza si no hay red o si la API de GitHub limita las peticiones. Estaba envuel
 
 - Lógica de negocio del editor (TipTap), tablas, imágenes, matemáticas y diagramas.
 - Proceso de firmado/actualización de Windows (`scripts/release.ps1` sigue funcionando igual).
+
+---
+
+## P18 — Aviso de nueva versión en instalaciones `.deb` (2026-10-25)
+
+### Estado
+
+✅ Completado y publicado en el release `v1.0.5`, con binarios de Windows y Linux compilados
+por CI desde el mismo commit.
+
+### Contexto
+
+Al cerrar P17 y publicar `v1.0.4` surgió una pregunta práctica: si se instala Marknote desde
+el `.deb`, ¿la app avisará de las versiones nuevas? La respuesta era **no**. El release
+publicaba `latest-linux.yml`, pero eso solo sirve para el AppImage.
+
+### Problema
+
+Quien instala por `.deb` (la vía natural en Ubuntu/Mint/Debian, con entrada en el menú y
+gestión por `apt`) no recibe ningún aviso: ni descarga, ni notificación. Para enterarse de una
+versión nueva tenía que revisar GitHub a mano, algo que en la práctica significa quedarse en
+una versión vieja indefinidamente.
+
+### Causa raíz
+
+`electron-updater` en Linux resuelve el updater con `AppImageUpdater`, cuyo `isUpdaterActive()`
+exige la variable `APPIMAGE`:
+
+```js
+// node_modules/electron-updater/out/AppImageUpdater.js:17
+isUpdaterActive() {
+  if (!process.env.APPIMAGE) {
+    this._logger.warn("APPIMAGE env is not defined, current application is not an AppImage");
+    return false;
+  }
+```
+
+Esa variable la exporta el runtime del AppImage al montarse; en una instalación por `.deb` no
+existe. Con `isUpdaterActive()` en `false`, `checkForUpdates()` no hace nada: no hay error, no
+hay evento, no hay aviso. Instalar por otra vía tampoco es opción: reemplazar un paquete de
+`dpkg` requiere root, así que el auto-update completo no es viable para ese formato sin un
+repositorio APT propio.
+
+### Solución implementada
+
+En lugar de intentar autoactualizar, la app **detecta y avisa**:
+
+1. Al arrancar (3 s después de `whenReady`, igual que el updater normal) se decide la vía:
+   `canSelfUpdate = process.platform !== 'linux' || isAppImageRun(...)`.
+2. Si no puede autoactualizarse, `checkManualUpdate()` consulta
+   `GET /repos/FranzMuhlhauser/marknote/releases/latest` en la API de GitHub.
+3. `findManualUpdate()` compara el `tag_name` con `app.getVersion()` y elige el archivo: el
+   `*_amd64.deb`, con caída al AppImage y, en último caso, a la página del release.
+4. Si hay versión nueva, se emite el estado `manual-available` con `{ version, url }`.
+5. La barra de menús muestra «⬇ Descargar X.Y.Z»; el clic llama a `openUrl(url)`, que abre la
+   descarga directa del `.deb` en el navegador del sistema.
+
+### Hallazgo durante las pruebas
+
+La primera versión de la detección miraba solo `process.env.APPIMAGE`. En la prueba E2E el
+aviso **no apareció**, y la causa fue reveladora: el entorno de desarrollo corre dentro de otra
+aplicación empaquetada como AppImage, que exporta `APPIMAGE` a todos sus procesos hijos. Un
+Marknote instalado por `.deb` habría creído estar en un AppImage e intentado un auto-update
+imposible (peor que no avisar: fallaría en silencio).
+
+La comprobación se endureció con `isAppImageRun(env, execPath)`: además de `APPIMAGE` y
+`APPDIR`, exige que `process.execPath` viva **dentro** del punto de montaje. Ese caso quedó
+cubierto con un test específico.
+
+### Implementación
+
+| Archivo | Cambio |
+|---|---|
+| `src/main/manualUpdate.ts` | **Nuevo.** Lógica pura sin imports de Electron: `parseVersion`, `isNewerVersion`, `pickLinuxDownload`, `findManualUpdate`, `isAppImageRun`. |
+| `src/main/index.ts` | `checkManualUpdate()` (fetch a la API + emisión del estado) y elección de vía al arrancar. |
+| `src/renderer/src/components/MenuBar.tsx` | Botón `manual-available` con la versión y el título «Descargar Marknote X.Y.Z para Linux». |
+| `src/renderer/src/App.tsx` | `handleOpenUpdatePage()`: abre la URL y avisa con un toast si no se puede. |
+| `src/renderer/src/hooks/useEditorState.ts` | El estado `updateStatus` admite `url` y `message`. |
+
+### Archivos nuevos
+
+- `src/main/manualUpdate.ts` — detección de versión nueva para instalaciones sin auto-update.
+- `src/main/__tests__/manualUpdate.test.ts` — 20 tests de esa lógica.
+
+### Validaciones realizadas
+
+1. ✅ `npm run typecheck` — sin errores.
+2. ✅ `npm run lint` — 0 errores (los mismos 20 warnings de `exhaustive-deps` que en P17).
+3. ✅ `npm test` — **37 tests en verde** (17 previos + 20 nuevos). La suite cubre:
+   - comparación de versiones, incluido el caso que rompe la comparación de texto
+     (`1.0.10` vs `1.0.9`) y `1.2` vs `1.2.0`;
+   - elección del asset (`.deb` → AppImage → página del release) y `null` sin assets;
+   - rechazo de borradores, pre-releases, tags ausentes y release ya instalada;
+   - detección de AppImage con `APPIMAGE` heredado de otro proceso (el bug encontrado).
+4. ✅ **E2E con la app real (Electron + CDP)**, forzando una versión local `1.0.3`: el build
+   renderiza el botón `⬇ Descargar 1.0.4`, con el `title` correcto, y el clic dispara
+   `openUrl` sin error. `window.api` conserva sus 30 métodos.
+5. ✅ **E2E del caso contrario**, con la versión real `1.0.4`: no aparece botón y el log no
+   muestra errores del updater (sí se registra el `Skip checkForUpdates...` esperado cuando la
+   app no está empaquetada).
+6. ✅ La URL abierta corresponde al asset real de la release
+   (`.../download/v1.0.4/marknote_1.0.4_amd64.deb`), verificado contra la API.
+7. ✅ `package.json` restaurado a su versión tras la prueba (la `1.0.3` era solo para el test).
+
+### Decisiones técnicas
+
+| Decisión | Alternativa | Por qué |
+|---|---|---|
+| Avisar con enlace en vez de intentar instalar | Auto-update real del `.deb` | Modificar un paquete de `dpkg` requiere root; la alternativa honesta es avisar y dejar que el usuario instale. |
+| Consultar la API de GitHub | Añadir un repositorio APT | Un repo APT exige firma de paquetes, alojamiento y `apt update` en cada máquina: desproporcionado para una app de escritorio. |
+| `isAppImageRun` con `APPDIR` + `execPath` | Confiar en `APPIMAGE` | La variable se hereda entre procesos: daba un falso positivo real, reproducido en la prueba. |
+| Lógica pura en `manualUpdate.ts` | Escribirla dentro de `index.ts` | `index.ts` importa `electron` y no se puede cargar en Vitest; separarla permite 20 tests sin mocks. |
+| Reutilizar el canal `update:status` | Crear un IPC nuevo | El renderer ya escucha ese canal; añadir un estado (`manual-available`) no toca el preload ni duplica el flujo. |
+| Comprobar 3 s después del arranque | Comprobar al mostrar la ventana | Mismo comportamiento que el updater existente: no retrasa el arranque ni compite con la carga del documento. |
+
+### Limitaciones conocidas
+
+- El aviso solo aparece **al arrancar** (no hay comprobación periódica): una sesión abierta
+  varios días no verá actualizaciones publicadas durante ese tiempo.
+- El `.deb` sigue sin auto-update: el enlace descarga el paquete y el usuario lo instala.
+- La API de GitHub sin token limita a 60 peticiones por hora y por IP; se hace una sola por
+  arranque, así que el límite solo afectaría a un uso muy intensivo del mismo equipo.
+- Sin tests de UI automatizados: la verificación del botón fue por CDP, igual que en P17.
+
+### Sin cambios en
+
+- Auto-update de Windows y del AppImage (siguen usando `electron-updater`).
+- Preload e IPC existentes: no se añadió ningún canal nuevo.
+- Empaquetado y CI: la release se genera con el mismo workflow de P17.
