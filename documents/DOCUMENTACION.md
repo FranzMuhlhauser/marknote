@@ -530,6 +530,26 @@ Windows SmartScreen muestra «Windows protegió tu PC» y algunos antivirus pued
 Es un **falso positivo** habitual en instaladores NSIS sin firma. El release incluye una
 nota explicando que hay que pulsar «Más información» → «Ejecutar de todas formas».
 
+### Actualizaciones según el formato de instalación
+
+| Instalación | Cómo recibe las versiones nuevas |
+|---|---|
+| 🪟 Windows (NSIS) | `electron-updater` avisa en la barra de menús, descarga e instala al reiniciar |
+| 🐧 AppImage | Igual: descarga el AppImage nuevo y reemplaza el archivo |
+| 🐧 `.deb` | **No puede autoactualizarse**: avisa con «⬇ Descargar X.Y.Z» y abre la descarga del `.deb` en el navegador |
+
+El paquete `.deb` no tiene auto-update porque `electron-updater` en Linux solo sabe reemplazar
+AppImages (necesita la variable `APPIMAGE`), y modificar un paquete de `dpkg` requeriría root.
+Para esos casos `checkManualUpdate()` consulta la API de GitHub al arrancar y, si hay una
+versión más nueva, envía el estado `manual-available` con `{ version, url }` al renderer
+(`src/main/manualUpdate.ts`). La lógica de comparación y elección de archivo vive separada del
+proceso principal para poder probarla con Vitest.
+
+La detección de «¿estoy corriendo como AppImage?» usa `isAppImageRun(env, execPath)` y no solo
+`APPIMAGE`: esa variable la hereda cualquier proceso hijo de un AppImage (por ejemplo, si
+lanzas Marknote desde la terminal de otra app empaquetada así), y un `.deb` creería entonces
+poder autoactualizarse. Se exige además que `execPath` viva dentro de `APPDIR`.
+
 ---
 
 ## Historial de Versiones

@@ -9,9 +9,10 @@ interface MenuAction {
 interface MenuBarProps {
   title: string
   modified: boolean
-  updateStatus: { status: string; version?: string; percent?: number } | null
+  updateStatus: { status: string; version?: string; percent?: number; url?: string; message?: string } | null
   onDownloadUpdate: () => void
   onInstallUpdate: () => void
+  onOpenUpdatePage: () => void
   onNew: () => void
   onOpen: () => void
   onImportCsv: () => void
@@ -66,7 +67,7 @@ function MenuDropdown({ label, items }: { label: string; items: MenuAction[] }) 
 }
 
 export function MenuBar(props: MenuBarProps) {
-  const { title, modified, updateStatus, onDownloadUpdate, onInstallUpdate } = props
+  const { title, modified, updateStatus, onDownloadUpdate, onInstallUpdate, onOpenUpdatePage } = props
   const archivo: MenuAction[] = [
     { label: 'Nuevo', shortcut: 'Ctrl+N', action: props.onNew },
     { label: 'Abrir', shortcut: 'Ctrl+O', action: props.onOpen },
@@ -135,6 +136,15 @@ export function MenuBar(props: MenuBarProps) {
       {updateStatus?.status === 'downloaded' && (
         <button className="menubar-update-btn" onClick={onInstallUpdate} title="Reiniciar para instalar">
           🔄 Reiniciar
+        </button>
+      )}
+      {updateStatus?.status === 'manual-available' && updateStatus.url && (
+        <button
+          className="menubar-update-btn"
+          onClick={onOpenUpdatePage}
+          title={`Descargar Marknote ${updateStatus.version} para Linux`}
+        >
+          ⬇ Descargar {updateStatus.version}
         </button>
       )}
     </nav>

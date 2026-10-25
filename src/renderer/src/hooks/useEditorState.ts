@@ -23,7 +23,7 @@ export function useEditorState() {
   const [showSource, setShowSource] = useState(false)
   const [sourceText, setSourceText] = useState('')
   const [workspaceFolder, setWorkspaceFolder] = useState<string | null>(null)
-  const [updateStatus, setUpdateStatus] = useState<{ status: string; version?: string; percent?: number } | null>(null)
+  const [updateStatus, setUpdateStatus] = useState<{ status: string; version?: string; percent?: number; url?: string; message?: string } | null>(null)
   const [showSettings, setShowSettings] = useState(false)
   const [showMentor, setShowMentor] = useState(false)
   const [showWelcome, setShowWelcome] = useState(true)

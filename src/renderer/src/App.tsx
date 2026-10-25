@@ -407,6 +407,17 @@ function App() {
     window.api.installUpdate()
   }, [])
 
+  // Instalación por .deb: no hay auto-update (electron-updater solo reemplaza
+  // AppImages), así que el aviso lleva a la descarga del .deb nuevo.
+  const handleOpenUpdatePage = useCallback(() => {
+    const url = ui.updateStatus?.url
+    if (!url) return
+    window.api.openUrl(url).then(
+      opened => { if (!opened) showToast('No se pudo abrir el enlace de descarga.') },
+      () => showToast('No se pudo abrir el enlace de descarga.')
+    )
+  }, [ui.updateStatus?.url])
+
   const openFolder = useCallback(async () => {
     const folder = await window.api.openFolder()
     if (!folder) return
@@ -483,6 +494,7 @@ function App() {
         updateStatus={ui.updateStatus}
         onDownloadUpdate={handleDownloadUpdate}
         onInstallUpdate={handleInstallUpdate}
+        onOpenUpdatePage={handleOpenUpdatePage}
         onNew={tabs.newDoc}
         onOpen={tabs.openDoc}
         onImportCsv={importCsv}

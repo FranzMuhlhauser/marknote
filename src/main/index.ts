@@ -3,6 +3,7 @@ import { join, basename, extname, dirname, isAbsolute, resolve } from 'path'
 import { readFile, writeFile, readdir, mkdir, rename, copyFile, unlink, access } from 'fs/promises'
 import { constants as fsConstants } from 'fs'
 import { autoUpdater } from 'electron-updater'
+import { findManualUpdate, isAppImageRun, type GitHubRelease } from './manualUpdate'
 import { authorizePath, assertFileAllowed, getWorkspaceFolder, isMarkdownPath, isMoveAllowed, isSafeName, isValidPathInput, setWorkspaceFolder } from './paths'
 
 let mainWindow: BrowserWindow | null = null
@@ -181,6 +182,25 @@ autoUpdater.on('error', (err) => {
   console.error('[updater]', err.message)
   send('update:status', 'error', { message: err.message })
 })
+
+// Repositorio del que se leen las releases publicadas.
+const RELEASES_REPO = 'FranzMuhlhauser/marknote'
+
+// Electron-updater en Linux solo puede reemplazar AppImages: necesita la
+// variable APPIMAGE, que no existe cuando la app se lanzó desde el paquete
+// .deb. Para ese caso se consulta la API de GitHub y, si hay algo más nuevo,
+// se avisa con el enlace de descarga del .deb (no se instala solo: hacerlo
+// requeriría root).
+async function checkManualUpdate(): Promise<void> {
+  const response = await fetch(`https://api.github.com/repos/${RELEASES_REPO}/releases/latest`, {
+    headers: { Accept: 'application/vnd.github+json', 'User-Agent': 'Marknote' }
+  })
+  if (!response.ok) throw new Error(`GitHub respondió ${response.status}`)
+  const release = (await response.json()) as GitHubRelease
+  const update = findManualUpdate(release, app.getVersion())
+  if (update) send('update:status', 'manual-available', update)
+  else send('update:status', 'not-available')
+}
 
 ipcMain.handle('dialog:open', async () => {
   const result = await dialog.showOpenDialog(mainWindow!, {
@@ -514,10 +534,17 @@ app.whenReady().then(() => {
   // UnhandledPromiseRejectionWarning en cada arranque sin conexión (el evento
   // 'error' del updater no cubre este caso porque el rechazo viene del
   // proveedor antes de emitirlo).
+  //
+  // En Windows y en el AppImage, electron-updater descarga e instala solo.
+  // Una instalación por .deb no puede: ahí solo se avisa y se da el enlace.
+  const canSelfUpdate = process.platform !== 'linux' || isAppImageRun(process.env, process.execPath)
+
   setTimeout(() => {
-    autoUpdater.checkForUpdates().catch((err: unknown) => {
+    const onError = (err: unknown) => {
       console.warn('[updater] no se pudo comprobar actualizaciones:', err instanceof Error ? err.message : err)
-    })
+    }
+    if (canSelfUpdate) autoUpdater.checkForUpdates().catch(onError)
+    else checkManualUpdate().catch(onError)
   }, 3000)
 })
 
