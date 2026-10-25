@@ -245,7 +245,19 @@ function preprocessTaskLists(source: string): string {
       return buildList(0, parsed[0].indent).html
     }
   )
-  s = s.replace(/\uE000(\d+)\uE001/g, (_, i) => blocks[Number(i)])
+  // Los bloques protegidos se restauran según su tipo:
+  // - Código inline (una línea): como HTML ya renderizado. Viaja dentro
+  //   del bloque <ul> HTML que markdown-it pasa en crudo; el markdown
+  //   crudo quedaría como texto literal (backticks visibles) que turndown
+  //   re-escapa en cada guardado (corrupción progresiva de barras). Con
+  //   renderInline el <code> viaja como HTML inline válido y TipTap le
+  //   asigna la marca de código.
+  // - Fences ``` multilínea: en crudo. Están fuera de los task items y
+  //   renderInline los destruiría (colapsaría el fence en un <code> inline).
+  s = s.replace(/\uE000(\d+)\uE001/g, (_, i) => {
+    const block = blocks[Number(i)]
+    return block.includes('\n') ? block : md.renderInline(block)
+  })
   return s
 }
 
