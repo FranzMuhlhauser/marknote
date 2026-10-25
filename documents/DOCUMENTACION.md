@@ -502,6 +502,11 @@ Para crear un nuevo Release:
 
 El script `scripts/release.ps1` automatiza los pasos 4-5. Requiere `gh` CLI autenticado y working tree limpio (o `-Force`).
 
+> **Ruta recomendada**: usa el release automático de abajo. Este flujo manual solo empaqueta
+> la plataforma de la máquina donde lo ejecutas: desde Windows no se pueden generar `.deb`
+> ni AppImage, y desde Linux no se puede generar el `Setup.exe`. Si se empaqueta solo una,
+> el otro instalador del release queda con código viejo aunque la versión sea la misma.
+
 ### Release automático (GitHub Actions)
 
 `.github/workflows/release.yml` se dispara al empujar un tag `vX.Y.Z`:
