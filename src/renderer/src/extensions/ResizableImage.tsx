@@ -98,7 +98,7 @@ export const ResizableImage = Node.create({
   }
 })
 
-function ImageComponent({ node, updateAttributes, editor }: any) {
+function ImageComponent({ node, updateAttributes }: any) {
   const [showAltInput, setShowAltInput] = useState(false)
   const [altText, setAltText] = useState(node.attrs.alt || '')
   const [editingSize, setEditingSize] = useState(false)

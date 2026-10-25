@@ -56,7 +56,10 @@ function createWindow(): void {
     icon: join(__dirname, '../../resources/icon.png'),
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
-      sandbox: false,
+      // El preload sólo usa contextBridge + ipcRenderer (API compatible con
+      // sandbox), así que se puede activar el sandbox del renderer sin perder
+      // funcionalidad y con una vía de escape menos si un documento es hostil.
+      sandbox: true,
       spellcheck: true
     }
   })
@@ -233,13 +236,21 @@ ipcMain.handle('dialog:save', async (_event, { filePath, content }: { filePath?:
     // implícitamente (igual que dialog:open); assertFileAllowed solo valida
     // las rutas que llegan del renderer, evitando escrituras no autorizadas.
     if (!fromDialog) assertFileAllowed(path)
-    await writeFile(path, content, 'utf-8')
+    await writeFile(path, normalizeMd(content), 'utf-8')
     authorizePath(path)
     return { ok: true, path }
   } catch (err: any) {
     return { ok: false, error: err?.message ?? 'Error al guardar el archivo' }
   }
 })
+
+// Los archivos de texto POSIX terminan en \n, pero turndown hace trim() al
+// serializar (htmlToMd), así que el .md se guardaba sin salto final y cada
+// guardado ensuciaba los diffs. Se normaliza aquí, en el punto de escritura,
+// para no tocar el estado del editor ni la detección de cambios.
+function normalizeMd(content: string): string {
+  return content.endsWith('\n') ? content : content + '\n'
+}
 
 ipcMain.handle('dialog:openFolder', async () => {
   const result = await dialog.showOpenDialog(mainWindow!, {
@@ -301,6 +312,7 @@ ipcMain.handle('file:readMedia', async (_event, filePath: unknown, baseDir?: unk
     if (!base) return null
     p = resolve(base, p)
   }
+  // eslint-disable-next-line no-control-regex -- se rechazan rutas con NUL a propósito
   if (!/^[^\x00]+$/.test(p)) return null
   const mime = MEDIA_MIME[extname(p).toLowerCase()]
   if (!mime) return null
@@ -351,7 +363,7 @@ ipcMain.handle('file:saveAsset', async (_event, args: { mdPath?: unknown; fileNa
 ipcMain.handle('file:write', async (_event, filePath: string, content: string) => {
   try {
     assertFileAllowed(filePath)
-    await writeFile(filePath, content, 'utf-8')
+    await writeFile(filePath, normalizeMd(content), 'utf-8')
     authorizePath(filePath)
     return { ok: true }
   } catch (err: any) {
@@ -359,8 +371,24 @@ ipcMain.handle('file:write', async (_event, filePath: string, content: string) =
   }
 })
 
-ipcMain.handle('update:startDownload', () => { autoUpdater.downloadUpdate() })
-ipcMain.handle('update:install', () => { autoUpdater.quitAndInstall() })
+ipcMain.handle('update:startDownload', async () => {
+  try {
+    await autoUpdater.downloadUpdate()
+    return { ok: true }
+  } catch (err: any) {
+    return { ok: false, error: err?.message ?? 'Error al descargar la actualización' }
+  }
+})
+ipcMain.handle('update:install', () => {
+  // quitAndInstall no devuelve promesa útil, pero puede lanzar si no hay
+  // actualización descargada; se devuelve el fallo en vez de propagarlo.
+  try {
+    autoUpdater.quitAndInstall()
+    return { ok: true }
+  } catch (err: any) {
+    return { ok: false, error: err?.message ?? 'Error al instalar la actualización' }
+  }
+})
 
 ipcMain.handle('window:toggleFullscreen', () => {
   if (!mainWindow) return
@@ -481,9 +509,16 @@ app.whenReady().then(() => {
     dispatchOpenFile(pendingFile)
   }
 
-  try {
-    setTimeout(() => autoUpdater.checkForUpdates(), 3000)
-  } catch { /* silent */ }
+  // checkForUpdates() devuelve una promesa que rechaza si no hay red o si la
+  // API de GitHub limita las peticiones. Sin el catch, Node emite
+  // UnhandledPromiseRejectionWarning en cada arranque sin conexión (el evento
+  // 'error' del updater no cubre este caso porque el rechazo viene del
+  // proveedor antes de emitirlo).
+  setTimeout(() => {
+    autoUpdater.checkForUpdates().catch((err: unknown) => {
+      console.warn('[updater] no se pudo comprobar actualizaciones:', err instanceof Error ? err.message : err)
+    })
+  }, 3000)
 })
 
 app.on('window-all-closed', () => {

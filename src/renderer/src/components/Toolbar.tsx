@@ -83,7 +83,7 @@ export function Toolbar({
     }
   }, [hintState])
 
-  const handleFormatClick = useCallback((id: string, e: React.MouseEvent<HTMLButtonElement>) => {
+  const handleFormatClick = useCallback((id: string, _e: React.MouseEvent<HTMLButtonElement>) => {
     if (!editor) return
     if (enterTimer.current) clearTimeout(enterTimer.current)
 

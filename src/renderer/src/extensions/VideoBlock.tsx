@@ -65,7 +65,7 @@ export const VideoBlock = Node.create({
   }
 })
 
-function VideoComponent({ node, updateAttributes, editor }: any) {
+function VideoComponent({ node, updateAttributes }: any) {
   const [editingSource, setEditingSource] = useState(false)
   const [sourceInput, setSourceInput] = useState(node.attrs.src || '')
   const [editingSize, setEditingSize] = useState(false)

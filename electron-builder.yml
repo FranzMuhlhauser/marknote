@@ -15,6 +15,10 @@ win:
   artifactName: ${productName}-${version}-Setup.${ext}
 linux:
   icon: resources/icon.png
+  # Hace que el .desktop se llame como desktopName (package.json) y que
+  # StartupWMClass coincida con el app_id que usa Electron, para que el
+  # lanzador asocie la ventana abierta con la entrada del menú.
+  syncDesktopName: true
   maintainer: FranzMuhlhauser <franz.muhlhauser@gmail.com>
   category: Office
   synopsis: Editor Markdown WYSIWYG nativo

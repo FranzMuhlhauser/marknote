@@ -100,12 +100,12 @@ export function SearchReplace({ editor, onClose, initialFocus = 'search' }: Sear
   useEffect(() => {
     if (!editor) return
     editor.registerPlugin(searchPlugin)
+    // eslint-disable-next-line no-empty -- el plugin puede no estar registrado
     return () => { try { editor.unregisterPlugin(searchPluginKey) } catch {} }
   }, [editor])
 
   useEffect(() => {
     if (!editor) return
-    const actives = new Set(matchIdx >= 0 && matchIdx < matches.length ? [matches[matchIdx]] : [])
     const decos = matches.map((m, i) =>
       Decoration.inline(m.from, m.to, {
         class: i === matchIdx ? 'search-match-active' : 'search-match-highlight'

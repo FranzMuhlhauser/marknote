@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, useRef } from 'react'
+import { useState, useCallback, useRef } from 'react'
 import { htmlToMd, mdToHtml } from '../utils/markdown'
 import { materializeMedia, countMissingLocalMedia } from '../utils/mediaAssets'
 import { setCurrentDocDir, dirOfPath } from '../utils/currentDoc'
@@ -42,7 +42,6 @@ export function useTabs({
   setShowSource,
   setPendingConfirm,
   setSourceText,
-  tablePickerEditorRef,
 }: UseTabsParams) {
   const [tabs, setTabs] = useState<TabDoc[]>([])
   const [activeTabId, setActiveTabId] = useState<string | null>(null)

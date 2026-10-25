@@ -53,6 +53,7 @@ function MathInlineComponent({ node }: any) {
       const html = katex.renderToString(node.attrs.tex, { throwOnError: false })
       return <NodeViewWrapper as="span"><span dangerouslySetInnerHTML={{ __html: html }} /></NodeViewWrapper>
     }
-  } catch (e) {}
+    // Si KaTeX falla se cae al texto plano de abajo.
+  } catch { /* sin KaTeX o TeX inválido */ }
   return <NodeViewWrapper as="span"><span className="math-inline-plain">{node.attrs.tex}</span></NodeViewWrapper>
 }

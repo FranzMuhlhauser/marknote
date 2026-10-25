@@ -20,7 +20,7 @@ export function MarkdownHintCard({ hint, anchorRect, onClose }: MarkdownHintCard
     return () => document.removeEventListener('mousedown', handleClick, true)
   }, [onClose])
 
-  let top = anchorRect.bottom + 8
+  const top = anchorRect.bottom + 8
   let left = anchorRect.left
 
   const cardW = 280

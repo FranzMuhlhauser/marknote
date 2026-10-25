@@ -56,7 +56,7 @@ interface DraggableTabProps {
   onReorder?: (dragId: string, targetId: string, position: 'before' | 'after') => void
 }
 
-function DraggableTab({ tab, isActive, tabsLength, onSelect, onClose, onCloseOthers, onCloseAll, onCloseRight, onCloseSaved, onReorder }: DraggableTabProps) {
+function DraggableTab({ tab, isActive, tabsLength: _tabsLength, onSelect, onClose, onCloseOthers, onCloseAll, onCloseRight, onCloseSaved, onReorder }: DraggableTabProps) {
   const [dropSide, setDropSide] = useState<'before' | 'after' | null>(null)
   const [showMenu, setShowMenu] = useState(false)
   const [menuPos, setMenuPos] = useState({ x: 0, y: 0 })

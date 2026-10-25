@@ -1,0 +1,90 @@
+name: Release
+
+# Se dispara al empujar un tag vX.Y.Z. Construye Windows y Linux en runners
+# nativos (electron-builder no puede empaquetar .deb/AppImage desde Windows),
+# sube los instaladores al release del tag y adjunta los manifiestos del
+# auto-updater (latest.yml para Windows, latest-linux.yml para Linux).
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  # Crea (o reutiliza) el release vacío una sola vez, para que las dos
+  # plataformas suban assets al mismo release sin condiciones de carrera.
+  create-release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Comprobar que el tag coincide con la versión de package.json
+        run: |
+          PKG_VERSION="v$(node -p "require('./package.json').version")"
+          if [ "$PKG_VERSION" != "$GITHUB_REF_NAME" ]; then
+            echo "El tag $GITHUB_REF_NAME no coincide con package.json ($PKG_VERSION)." >&2
+            echo "Sube la versión antes de etiquetar para no publicar binarios mal numerados." >&2
+            exit 1
+          fi
+
+      - name: Crear el release si no existe
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="${GITHUB_REF_NAME}"
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "El release $TAG ya existe, se reutiliza."
+          else
+            gh release create "$TAG" --repo "$GITHUB_REPOSITORY" \
+              --title "$TAG" --generate-notes
+          fi
+
+  build:
+    needs: create-release
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            script: package:win
+          - os: ubuntu-latest
+            script: package:linux
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Instalar dependencias
+        run: npm ci
+
+      - name: Comprobaciones (typecheck, lint, tests)
+        run: |
+          npm run typecheck
+          npm run lint
+          npm test
+
+      - name: Empaquetar
+        # --publish never: la subida la hace el paso siguiente con gh, para
+        # controlar exactamente qué archivos se adjuntan al release.
+        run: npm run ${{ matrix.script }} -- --publish never
+
+      - name: Subir assets al release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="${GITHUB_REF_NAME}"
+          mapfile -t FILES < <(ls dist-electron/*.exe dist-electron/*.exe.blockmap \
+            dist-electron/*.deb dist-electron/*.AppImage \
+            dist-electron/latest.yml dist-electron/latest-linux.yml 2>/dev/null || true)
+          if [ ${#FILES[@]} -eq 0 ]; then
+            echo "No se encontraron artefactos en dist-electron/" >&2
+            exit 1
+          fi
+          printf 'Subiendo:\n%s\n' "${FILES[*]}"
+          gh release upload "$TAG" "${FILES[@]}" --repo "$GITHUB_REPOSITORY" --clobber

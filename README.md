@@ -207,6 +207,12 @@ npm run dev
 # Type-check
 npm run typecheck
 
+# Lint (ESLint + reglas de React Hooks)
+npm run lint
+
+# Tests (Vitest: ida y vuelta Markdown y corrector ortográfico)
+npm test
+
 # Compilar todo
 npm run build
 
@@ -218,6 +224,8 @@ npm run package:linux
 ```
 
 El comando `package:win` genera un instalador NSIS en `dist-electron/`.
+
+Los releases se publican con el workflow [.github/workflows/release.yml](.github/workflows/release.yml): al empujar un tag `vX.Y.Z` compila Windows y Linux en runners nativos, pasa typecheck/lint/tests y adjunta los instaladores más los manifiestos del auto-updater (`latest.yml` y `latest-linux.yml`) al release del tag.
 
 El comando `package:linux` genera `marknote_<versión>_amd64.deb` y `Marknote-<versión>.AppImage` en `dist-electron/` (sólo puede ejecutarse en Linux).
 

@@ -207,7 +207,7 @@ export function FileExplorer({ folder, currentFile, onOpenFile, onOpenFolder, on
 
   const handleDuplicate = useCallback(async (filePath: string) => {
     try {
-      const newPath = await window.api.duplicate(filePath)
+      await window.api.duplicate(filePath)
       setRefreshKey(k => k + 1)
       refreshLists()
     } catch (e) { console.error('Duplicate error:', e) }

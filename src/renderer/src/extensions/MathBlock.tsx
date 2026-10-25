@@ -1,6 +1,6 @@
 import { Node, mergeAttributes, PasteRule } from '@tiptap/core'
 import { NodeViewWrapper, ReactNodeViewRenderer } from '@tiptap/react'
-import { useRef, useState, useEffect } from 'react'
+import { useState, useEffect } from 'react'
 import { ensureNeighborParagraphs, ensureParagraphsAroundInsertedNode, atomBlockKeyboardShortcuts } from './blockNeighbors'
 
 // Declara el comando setMath en la interface Commands (mismo patrón que

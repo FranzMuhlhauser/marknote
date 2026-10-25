@@ -23,18 +23,13 @@ const LANGUAGES = [
   { display: 'Bash', value: 'bash' },
 ]
 
-function getDisplayName(lang: string | null): string {
-  const found = lang ? LANGUAGES.find(l => l.value === lang) : null
-  return found ? found.display : lang || 'Plain Text'
-}
-
 export const CodeBlock = CodeBlockLowlight.extend({
   addNodeView() {
     return ReactNodeViewRenderer(CodeBlockComponent)
   }
 })
 
-function CodeBlockComponent({ node, updateAttributes, extension }: any) {
+function CodeBlockComponent({ node, updateAttributes }: any) {
   const [collapsed, setCollapsed] = useState(false)
   const [copied, setCopied] = useState(false)
   const [showLines, setShowLines] = useState(true)
